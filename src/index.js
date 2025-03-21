@@ -10,6 +10,7 @@ const path = require('path');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { exec } = require('child_process');
+const serverless = require('serverless-http');
 
 const app = express();
 
@@ -25,10 +26,20 @@ app.use(express.json());
 
 app.use(express.static('frontend'));
 
+// Ensure uploads directory exists (only in development)
+if (process.env.NODE_ENV !== 'production' && !fs.existsSync('uploads')) {
+    fs.mkdirSync('uploads');
+}
+
+// In production (Vercel), we'll use /tmp for uploads
+const uploadDir = process.env.NODE_ENV === 'production' ? '/tmp' : 'uploads';
+
 // Configure multer for video uploads
 const upload = multer({
     storage: multer.diskStorage({
-        destination: 'uploads/',
+        destination: (_req, _file, cb) => {
+            cb(null, uploadDir);
+        },
         filename: (_req, file, cb) => {
             const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
             cb(null, uniqueName);
@@ -47,31 +58,41 @@ const upload = multer({
     }
 });
 
-// Ensure uploads directory exists
-if (!fs.existsSync('uploads')) {
-    fs.mkdirSync('uploads');
-}
-
 let config = null;
 
-// Load configuration from file if it exists
-try {
-    const configPath = path.join(__dirname, 'config.json');
-    if (fs.existsSync(configPath)) {
-        const savedConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        config = savedConfig;
-        console.log('Loaded configuration from file');
+// Load configuration from environment variables (Vercel) or from file
+if (process.env.NODE_ENV === 'production' && process.env.AWS_ACCESS_KEY_ID) {
+    // Use environment variables in production
+    config = {
+        AWS_REGION: process.env.AWS_REGION,
+        AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+        AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+        S3_BUCKET_NAME: process.env.S3_BUCKET_NAME,
+        ECS_CLUSTER: process.env.ECS_CLUSTER,
+        ECS_TASK_DEFINITION: process.env.ECS_TASK_DEFINITION,
+        ECS_SUBNETS: process.env.ECS_SUBNETS,
+        ECS_SECURITY_GROUPS: process.env.ECS_SECURITY_GROUPS
+    };
+    console.log('Using environment variables for configuration');
+} else {
+    // Try to load from file in development
+    try {
+        const configPath = path.join(__dirname, 'config.json');
+        if (fs.existsSync(configPath)) {
+            const savedConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            config = savedConfig;
+            console.log('Loaded configuration from file');
+        }
+    } catch (error) {
+        console.error('Error loading configuration:', error);
     }
-}
-catch (error) {
-    console.error('Error loading configuration:', error);
 }
 
 // API endpoint to save configuration
 app.post('/api/config', (req, res) => {
     try {
         const newConfig = req.body;
-        
+
         // Validate required fields
         const requiredFields = [
             'AWS_REGION',
@@ -83,16 +104,16 @@ app.post('/api/config', (req, res) => {
             'ECS_SUBNETS',
             'ECS_SECURITY_GROUPS'
         ];
-        
+
         const missingFields = requiredFields.filter(field => !newConfig[field]);
-        
+
         if (missingFields.length > 0) {
             return res.status(400).json({
                 error: 'Missing required configuration fields',
                 missingFields
             });
         }
-        
+
         // Validate AWS region format
         if (!/^[a-z]{2}-[a-z]+-\d{1}$/.test(newConfig.AWS_REGION)) {
             return res.status(400).json({
@@ -100,7 +121,7 @@ app.post('/api/config', (req, res) => {
                 example: 'ap-south-1'
             });
         }
-        
+
         // Validate subnet format
         const subnets = newConfig.ECS_SUBNETS.split(',');
         if (!subnets.every(subnet => subnet.trim().startsWith('subnet-'))) {
@@ -109,7 +130,7 @@ app.post('/api/config', (req, res) => {
                 example: 'subnet-xxx,subnet-yyy'
             });
         }
-        
+
         // Validate security group format
         const securityGroups = newConfig.ECS_SECURITY_GROUPS.split(',');
         if (!securityGroups.every(sg => sg.trim().startsWith('sg-'))) {
@@ -118,12 +139,12 @@ app.post('/api/config', (req, res) => {
                 example: 'sg-xxx,sg-yyy'
             });
         }
-        
+
         config = newConfig;
-        
+
         // Save config to a file for persistence
         fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 2));
-        
+
         res.json({
             success: true,
             message: 'Configuration saved successfully'
@@ -143,11 +164,11 @@ app.get('/api/config', (_req, res) => {
             message: 'System not configured. Please configure the system first.'
         });
     }
-    
+
     // Return config without sensitive data
     const safeConfig = Object.assign({}, config);
     delete safeConfig.AWS_SECRET_ACCESS_KEY;
-    
+
     res.json({
         configured: true,
         config: safeConfig,
@@ -160,20 +181,20 @@ app.post('/api/upload', upload.single('video'), async (req, res) => {
     if (!config) {
         return res.status(400).json({ error: 'System not configured' });
     }
-    
+
     try {
         const file = req.file;
         if (!file) {
             return res.status(400).json({ error: 'No video file provided' });
         }
-        
+
         console.log('Received file:', {
             originalname: file.originalname,
             filename: file.filename,
             path: file.path,
             size: file.size
         });
-        
+
         // Initialize S3 client with force path style for custom endpoints
         const s3Client = new S3Client({
             region: config.AWS_REGION,
@@ -182,31 +203,31 @@ app.post('/api/upload', upload.single('video'), async (req, res) => {
                 secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
             }
         });
-        
+
         // Upload to S3
         const key = `raw/${path.basename(file.filename)}`;
         console.log('Uploading to S3:', {
             bucket: config.S3_BUCKET_NAME,
             key: key
         });
-        
+
         await s3Client.send(new PutObjectCommand({
             Bucket: config.S3_BUCKET_NAME,
             Key: key,
             Body: fs.createReadStream(file.path)
         }));
-        
+
         console.log('Successfully uploaded to S3');
-        
+
         // Clean up local file
         fs.unlinkSync(file.path);
         console.log('Cleaned up local file');
-        
+
         // Start transcoding process
         const jobId = uuidv4();
         const performanceLevel = req.body.performanceLevel || 'standard'; // default to standard
         console.log(`Starting transcoding job ${jobId} for video: ${key}, performance level: ${performanceLevel}`);
-        
+
         // Create job tracking object
         activeJobs.set(jobId, {
             videoKey: key,
@@ -215,13 +236,13 @@ app.post('/api/upload', upload.single('video'), async (req, res) => {
             containerLogsAdded: false,
             performanceLevel
         });
-        
+
         // Start ECS task for transcoding
         startECSTask(key, jobId, performanceLevel);
-        
+
         // Return the future HLS playlist URL and job ID
         const playlistUrl = `https://s3.${config.AWS_REGION}.amazonaws.com/${config.S3_BUCKET_NAME}/output/${path.basename(file.filename, path.extname(file.filename))}/master.m3u8`;
-        
+
         res.json({
             success: true,
             message: 'Video uploaded successfully and transcoding started',
@@ -240,11 +261,11 @@ app.post('/api/upload', upload.single('video'), async (req, res) => {
 app.get('/api/jobs/:jobId', (req, res) => {
     const jobId = req.params.jobId;
     const job = activeJobs.get(jobId);
-    
+
     if (!job) {
         return res.status(404).json({ error: 'Job not found' });
     }
-    
+
     res.json({
         jobId,
         status: job.status,
@@ -262,7 +283,7 @@ app.get('/api/jobs', (_req, res) => {
         startTime: job.startTime,
         videoKey: job.videoKey
     }));
-    
+
     res.json({ jobs });
 });
 
@@ -271,7 +292,7 @@ app.get('/api/test-connection', async (_req, res) => {
     if (!config) {
         return res.status(400).json({ error: 'System not configured' });
     }
-    
+
     try {
         // S3 connection test
         console.log('Testing S3 connection...');
@@ -283,7 +304,7 @@ app.get('/api/test-connection', async (_req, res) => {
             }
         });
         await s3Client.send(new ListBucketsCommand({}));
-        
+
         // ECS connection test
         console.log('Testing ECS connection...');
         const ecsClient = new ECSClient({
@@ -296,7 +317,7 @@ app.get('/api/test-connection', async (_req, res) => {
         await ecsClient.send(new DescribeClustersCommand({
             clusters: [config.ECS_CLUSTER]
         }));
-        
+
         // EC2 connection test for subnets and security groups
         console.log('Testing EC2 connection...');
         const ec2Client = new EC2Client({
@@ -306,17 +327,17 @@ app.get('/api/test-connection', async (_req, res) => {
                 secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
             }
         });
-        
+
         const subnets = config.ECS_SUBNETS.split(',').map(s => s.trim());
         await ec2Client.send(new DescribeSubnetsCommand({
             SubnetIds: subnets
         }));
-        
+
         const securityGroups = config.ECS_SECURITY_GROUPS.split(',').map(sg => sg.trim());
         await ec2Client.send(new DescribeSecurityGroupsCommand({
             GroupIds: securityGroups
         }));
-        
+
         res.json({
             success: true,
             message: 'AWS connection tests passed successfully'
@@ -334,10 +355,21 @@ app.get('/api/test-connection', async (_req, res) => {
 // Track active transcoding jobs
 const activeJobs = new Map();
 
-// Function to execute shell commands and return stdout as string
+// Function to execute shell commands and return stdout as string (with safeguards for Vercel)
 async function execCommand(command) {
-    const { stdout } = await exec(command);
-    return stdout?.toString() || '';
+    // In production/Vercel, don't attempt to run shell commands
+    if (process.env.NODE_ENV === 'production') {
+        console.log(`[PROD] Would execute command: ${command}`);
+        return 'command-execution-skipped-in-production';
+    }
+
+    try {
+        const { stdout } = await exec(command);
+        return stdout?.toString() || '';
+    } catch (error) {
+        console.error(`Error executing command: ${command}`, error);
+        return '';
+    }
 }
 
 // Start the server
@@ -363,12 +395,12 @@ function startServer(port) {
 async function monitorECSTask(jobId, taskArn) {
     const job = activeJobs.get(jobId);
     if (!job) return;
-    
+
     job.taskArn = taskArn;
     job.status = 'RUNNING';
-    
+
     console.log(`Starting to monitor ECS task: ${taskArn} for job: ${jobId}`);
-    
+
     // Initialize ECS client
     const ecsClient = new ECSClient({
         region: config.AWS_REGION,
@@ -377,27 +409,27 @@ async function monitorECSTask(jobId, taskArn) {
             secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
         }
     });
-    
+
     let isRunning = true;
-    
+
     while (isRunning && activeJobs.has(jobId)) {
         try {
             const response = await ecsClient.send(new DescribeTasksCommand({
                 cluster: config.ECS_CLUSTER,
                 tasks: [taskArn]
             }));
-            
+
             if (response.tasks.length === 0) {
                 console.log(`Task ${taskArn} not found`);
                 job.status = 'FAILED';
                 isRunning = false;
                 continue;
             }
-            
+
             const task = response.tasks[0];
             const status = task.lastStatus;
             console.log(`Task status: ${status}`);
-            
+
             // Update job status based on task status
             if (status === 'STOPPED') {
                 // Check if the task stopped due to an error
@@ -410,7 +442,7 @@ async function monitorECSTask(jobId, taskArn) {
                 }
                 isRunning = false;
             }
-            
+
             // Wait before checking status again
             await new Promise(resolve => setTimeout(resolve, 10000)); // 10 seconds
         } catch (error) {
@@ -428,12 +460,20 @@ async function startECSTask(videoKey, jobId, performanceLevel = 'standard') {
         console.error('Cannot start ECS task: System not configured');
         return;
     }
-    
+
     try {
-        // Get AWS account ID for task execution role
-        const accountId = await getAwsAccountId();
-        console.log(`Using user account ID: ${accountId}`);
-        
+        // In serverless environment, we need to be careful with long-running tasks
+        const isServerless = process.env.NODE_ENV === 'production';
+
+        // Get AWS account ID for task execution role (skip in production/serverless)
+        let accountId = 'unknown';
+        if (!isServerless) {
+            accountId = await getAwsAccountId();
+            console.log(`Using user account ID: ${accountId}`);
+        } else {
+            console.log('Skipping AWS account ID lookup in serverless environment');
+        }
+
         // Initialize ECS client
         const ecsClient = new ECSClient({
             region: config.AWS_REGION,
@@ -442,14 +482,14 @@ async function startECSTask(videoKey, jobId, performanceLevel = 'standard') {
                 secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
             }
         });
-        
+
         // Prepare task definition
         const taskDefinition = config.ECS_TASK_DEFINITION;
-        
+
         // Prepare subnets and security groups
         const subnets = config.ECS_SUBNETS.split(',').map(s => s.trim());
         const securityGroups = config.ECS_SECURITY_GROUPS.split(',').map(sg => sg.trim());
-        
+
         // Determine CPU and memory based on performance level
         let cpu, memory;
         switch (performanceLevel) {
@@ -463,7 +503,7 @@ async function startECSTask(videoKey, jobId, performanceLevel = 'standard') {
                 memory = '2048';
                 break;
         }
-        
+
         // Configure task parameters
         const params = {
             cluster: config.ECS_CLUSTER,
@@ -509,20 +549,30 @@ async function startECSTask(videoKey, jobId, performanceLevel = 'standard') {
                 memory
             }
         };
-        
+
         // Start the task
         const runTaskResult = await ecsClient.send(new RunTaskCommand(params));
-        
+
         if (runTaskResult.tasks.length === 0) {
             throw new Error(`Failed to start task: ${runTaskResult.failures[0]?.reason || 'Unknown error'}`);
         }
-        
+
         const taskArn = runTaskResult.tasks[0].taskArn;
         console.log(`Started ECS task: ${taskArn}`);
-        
-        // Start monitoring the task
-        monitorECSTask(jobId, taskArn);
-        
+
+        // Start monitoring the task (not in serverless environment)
+        if (!isServerless) {
+            monitorECSTask(jobId, taskArn);
+        } else {
+            console.log('Task monitoring is skipped in serverless environment');
+            // In serverless, just update the job status to running
+            const job = activeJobs.get(jobId);
+            if (job) {
+                job.taskArn = taskArn;
+                job.status = 'RUNNING';
+            }
+        }
+
         return taskArn;
     } catch (error) {
         console.error('Error starting ECS task:', error);
@@ -532,6 +582,11 @@ async function startECSTask(videoKey, jobId, performanceLevel = 'standard') {
         }
         throw error;
     }
+}
+
+// Start the server if we're not in serverless environment
+if (process.env.NODE_ENV !== 'production') {
+    startServer(PORT);
 }
 
 // Helper function to get AWS account ID
@@ -546,4 +601,19 @@ async function getAwsAccountId() {
     }
 }
 
-startServer(PORT); 
+// Add a health check endpoint for Vercel
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        environment: process.env.NODE_ENV || 'development',
+        serverless: process.env.VERCEL === '1' ? true : false,
+        timestamp: new Date().toISOString(),
+        configured: config ? true : false
+    });
+});
+
+// Export the Express app for local development
+module.exports = app;
+
+// Export the handler for serverless environments
+module.exports.handler = serverless(app); 

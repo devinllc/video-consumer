@@ -51,6 +51,13 @@
             ]
         },
         {
+            "src": "/api/test-s3",
+            "dest": "src/index.js",
+            "methods": [
+                "GET"
+            ]
+        },
+        {
             "src": "/api/(.*)",
             "dest": "src/index.js"
         },

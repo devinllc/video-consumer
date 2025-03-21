@@ -287,13 +287,19 @@ app.get('/api/jobs', (_req, res) => {
     res.json({ jobs });
 });
 
-// Test AWS connectivity
-app.get('/api/test-connection', async (_req, res) => {
+// Test S3 connectivity only
+app.get('/api/test-s3', async (_req, res) => {
     if (!config) {
         return res.status(400).json({ error: 'System not configured' });
     }
 
     try {
+        // Log credentials (partial, for debugging)
+        console.log('Testing S3 with region:', config.AWS_REGION);
+        console.log('Using key ID:', config.AWS_ACCESS_KEY_ID ?
+            `${config.AWS_ACCESS_KEY_ID.substring(0, 4)}...${config.AWS_ACCESS_KEY_ID.substring(config.AWS_ACCESS_KEY_ID.length - 4)}` : 'missing');
+        console.log('S3 bucket:', config.S3_BUCKET_NAME);
+
         // S3 connection test
         console.log('Testing S3 connection...');
         const s3Client = new S3Client({
@@ -303,51 +309,145 @@ app.get('/api/test-connection', async (_req, res) => {
                 secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
             }
         });
-        await s3Client.send(new ListBucketsCommand({}));
 
-        // ECS connection test
-        console.log('Testing ECS connection...');
-        const ecsClient = new ECSClient({
-            region: config.AWS_REGION,
-            credentials: {
-                accessKeyId: config.AWS_ACCESS_KEY_ID,
-                secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
-            }
-        });
-        await ecsClient.send(new DescribeClustersCommand({
-            clusters: [config.ECS_CLUSTER]
-        }));
-
-        // EC2 connection test for subnets and security groups
-        console.log('Testing EC2 connection...');
-        const ec2Client = new EC2Client({
-            region: config.AWS_REGION,
-            credentials: {
-                accessKeyId: config.AWS_ACCESS_KEY_ID,
-                secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
-            }
-        });
-
-        const subnets = config.ECS_SUBNETS.split(',').map(s => s.trim());
-        await ec2Client.send(new DescribeSubnetsCommand({
-            SubnetIds: subnets
-        }));
-
-        const securityGroups = config.ECS_SECURITY_GROUPS.split(',').map(sg => sg.trim());
-        await ec2Client.send(new DescribeSecurityGroupsCommand({
-            GroupIds: securityGroups
-        }));
+        const listResult = await s3Client.send(new ListBucketsCommand({}));
+        const buckets = listResult.Buckets || [];
+        const bucketExists = buckets.some(bucket => bucket.Name === config.S3_BUCKET_NAME);
 
         res.json({
             success: true,
-            message: 'AWS connection tests passed successfully'
+            bucketExists,
+            bucketName: config.S3_BUCKET_NAME,
+            region: config.AWS_REGION,
+            totalBuckets: buckets.length,
+            message: 'S3 connection successful'
+        });
+    } catch (error) {
+        console.error('S3 connection test error:', error);
+        res.status(500).json({
+            error: 'S3 connection test failed',
+            details: error.message,
+            requestId: error.$metadata?.requestId
         });
     }
-    catch (error) {
+});
+
+// Test AWS connectivity (full test)
+app.get('/api/test-connection', async (_req, res) => {
+    if (!config) {
+        return res.status(400).json({ error: 'System not configured' });
+    }
+
+    try {
+        const results = {
+            tests: [],
+            success: true,
+            message: 'AWS connection tests started'
+        };
+
+        // Log credentials (partial, for debugging)
+        console.log('Testing with region:', config.AWS_REGION);
+        console.log('Using key ID:', config.AWS_ACCESS_KEY_ID ?
+            `${config.AWS_ACCESS_KEY_ID.substring(0, 4)}...${config.AWS_ACCESS_KEY_ID.substring(config.AWS_ACCESS_KEY_ID.length - 4)}` : 'missing');
+        console.log('S3 bucket:', config.S3_BUCKET_NAME);
+
+        try {
+            // S3 connection test
+            console.log('Testing S3 connection...');
+            const s3Client = new S3Client({
+                region: config.AWS_REGION,
+                credentials: {
+                    accessKeyId: config.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
+                }
+            });
+            await s3Client.send(new ListBucketsCommand({}));
+            results.tests.push({ service: 'S3', success: true });
+            console.log('S3 connection successful');
+        } catch (error) {
+            console.error('S3 connection failed:', error.message);
+            results.tests.push({ service: 'S3', success: false, error: error.message });
+            results.success = false;
+        }
+
+        try {
+            // ECS connection test
+            console.log('Testing ECS connection...');
+            const ecsClient = new ECSClient({
+                region: config.AWS_REGION,
+                credentials: {
+                    accessKeyId: config.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
+                }
+            });
+            await ecsClient.send(new DescribeClustersCommand({
+                clusters: [config.ECS_CLUSTER]
+            }));
+            results.tests.push({ service: 'ECS', success: true });
+            console.log('ECS connection successful');
+        } catch (error) {
+            console.error('ECS connection failed:', error.message);
+            results.tests.push({ service: 'ECS', success: false, error: error.message });
+            results.success = false;
+        }
+
+        try {
+            // EC2 connection test for subnets
+            console.log('Testing EC2 subnet connection...');
+            const ec2Client = new EC2Client({
+                region: config.AWS_REGION,
+                credentials: {
+                    accessKeyId: config.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
+                }
+            });
+
+            const subnets = config.ECS_SUBNETS.split(',').map(s => s.trim());
+            await ec2Client.send(new DescribeSubnetsCommand({
+                SubnetIds: subnets
+            }));
+            results.tests.push({ service: 'EC2-Subnets', success: true });
+            console.log('EC2 subnet connection successful');
+        } catch (error) {
+            console.error('EC2 subnet connection failed:', error.message);
+            results.tests.push({ service: 'EC2-Subnets', success: false, error: error.message });
+            results.success = false;
+        }
+
+        try {
+            // EC2 connection test for security groups
+            console.log('Testing EC2 security group connection...');
+            const ec2Client = new EC2Client({
+                region: config.AWS_REGION,
+                credentials: {
+                    accessKeyId: config.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
+                }
+            });
+
+            const securityGroups = config.ECS_SECURITY_GROUPS.split(',').map(sg => sg.trim());
+            await ec2Client.send(new DescribeSecurityGroupsCommand({
+                GroupIds: securityGroups
+            }));
+            results.tests.push({ service: 'EC2-SecurityGroups', success: true });
+            console.log('EC2 security group connection successful');
+        } catch (error) {
+            console.error('EC2 security group connection failed:', error.message);
+            results.tests.push({ service: 'EC2-SecurityGroups', success: false, error: error.message });
+            results.success = false;
+        }
+
+        results.message = results.success
+            ? 'All AWS connection tests passed successfully'
+            : 'Some AWS connection tests failed';
+
+        res.json(results);
+    } catch (error) {
         console.error('Connection test error:', error);
         res.status(500).json({
             error: 'AWS connection test failed',
-            details: error.message
+            details: error.message,
+            stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
         });
     }
 });

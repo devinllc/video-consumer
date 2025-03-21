@@ -1,19 +1,9 @@
-// Environment configuration
-(function () {
-    // Default API URL (local development)
-    window.API_BASE_URL = 'http://localhost:3001';
+// Environment configuration for video-consumer app
+// Replace the EC2_IP_ADDRESS with your actual EC2 instance public IP
+const API_BASE_URL = 'http://EC2_IP_ADDRESS:3001';
 
-    // Production URL when deployed
-    if (window.location.hostname !== 'localhost') {
-        // Using the actual deployed backend URL
-        window.API_BASE_URL = 'https://video-consumer-backend.vercel.app';
+// Uncomment the line below when deploying to production with HTTPS:
+// const API_BASE_URL = 'https://your-ec2-domain.com';
 
-        // Detect if we're in a development environment
-        if (window.location.hostname.includes('vercel.app')) {
-            // For preview deployments
-            console.log('Running in Vercel preview environment');
-        }
-    }
-
-    console.log('API Base URL:', window.API_BASE_URL);
-})(); 
+// Don't modify below this line
+console.log('Environment loaded:', API_BASE_URL); 

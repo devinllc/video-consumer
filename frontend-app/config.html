@@ -208,7 +208,17 @@
                     ECS_SECURITY_GROUPS: document.getElementById('ecsSecurityGroups').value
                 };
 
+                const alertDiv = document.getElementById('alert');
+                alertDiv.style.display = 'block';
+                alertDiv.innerHTML = `
+                    <div class="alert alert-info">
+                        Saving configuration...
+                    </div>
+                `;
+
                 try {
+                    console.log('Sending config to:', getApiUrl(API_CONFIG.ENDPOINTS.CONFIG));
+
                     const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.CONFIG), {
                         method: 'POST',
                         headers: {
@@ -217,22 +227,39 @@
                         body: JSON.stringify(config)
                     });
 
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('Server error:', response.status, errorText);
+                        throw new Error(`Server error: ${response.status}. ${errorText}`);
+                    }
+
                     const data = await response.json();
 
                     if (data.success) {
-                        document.getElementById('alert').innerHTML = `
+                        alertDiv.innerHTML = `
                             <div class="alert alert-success">
-                                Configuration saved successfully
+                                <h5>Configuration saved successfully</h5>
+                                ${data.message ? `<p>${data.message}</p>` : ''}
+                                ${data.warning ? `<p class="text-warning">Warning: ${data.errorDetails}</p>` : ''}
                             </div>
                         `;
+                    } else if (data.error) {
+                        throw new Error(data.error + (data.details ? `: ${data.details}` : ''));
                     } else {
-                        throw new Error(data.error || 'Failed to save configuration');
+                        throw new Error('Failed to save configuration');
                     }
                 } catch (error) {
                     console.error('Error saving configuration:', error);
-                    document.getElementById('alert').innerHTML = `
+                    alertDiv.innerHTML = `
                         <div class="alert alert-danger">
-                            Error saving configuration: ${error.message}
+                            <h5>Error saving configuration</h5>
+                            <p>${error.message || 'Connection failed'}</p>
+                            <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
+                                    onclick="document.getElementById('debug-info').style.display='block'">Show Details</button>
+                            <div id="debug-info" class="mt-2" style="display:none">
+                                <p>API URL: ${getApiUrl(API_CONFIG.ENDPOINTS.CONFIG)}</p>
+                                <p>Please check browser console for more details.</p>
+                            </div>
                         </div>
                     `;
                 }
@@ -249,70 +276,63 @@
             `;
 
             try {
-                const config = {
-                    AWS_REGION: document.getElementById('awsRegion').value,
-                    AWS_ACCESS_KEY_ID: document.getElementById('awsAccessKeyId').value,
-                    AWS_SECRET_ACCESS_KEY: document.getElementById('awsSecretKey').value,
-                    S3_BUCKET_NAME: document.getElementById('s3BucketName').value,
-                    ECS_CLUSTER: document.getElementById('ecsCluster').value,
-                    ECS_TASK_DEFINITION: document.getElementById('ecsTaskDefinition').value,
-                    ECS_SUBNETS: document.getElementById('ecsSubnets').value,
-                    ECS_SECURITY_GROUPS: document.getElementById('ecsSecurityGroups').value
-                };
+                // We'll test S3 only since that's what's failing
+                console.log('Testing S3 connection...');
+                const response = await fetch(getApiUrl('/api/test-s3'));
 
-                console.log('Testing connection with config:', { ...config, AWS_SECRET_ACCESS_KEY: '***' });
-
-                // First, save configuration if it's not already saved
-                const saveResponse = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.CONFIG), {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(config)
-                });
-
-                const saveData = await saveResponse.json();
-                if (!saveData.success) {
-                    throw new Error(saveData.error || 'Failed to save configuration');
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Test connection failed:', response.status, errorText);
+                    throw new Error(`Server error: ${response.status}. ${errorText}`);
                 }
 
-                // Then, test the connection
-                const testResponse = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.TEST_CONNECTION));
-                const testData = await testResponse.json();
+                const data = await response.json();
 
-                console.log('Test connection response:', testData);
+                if (data.success) {
+                    let message = `<h5>Connection Test Successful</h5>`;
+                    message += `<p>Successfully connected to S3 in region: ${data.region}</p>`;
 
-                if (testData.success) {
-                    alertDiv.innerHTML = `
-                        <div class="alert alert-success">
-                            Connection test successful! All services are accessible.
-                            <ul>
-                                ${testData.successes.map(msg => `<li>${msg}</li>`).join('')}
-                            </ul>
-                        </div>
-                    `;
-                } else {
-                    let errorDetails = '';
-
-                    if (testData.details) {
-                        errorDetails = '<h5>Details:</h5><pre>' + JSON.stringify(testData.details, null, 2) + '</pre>';
+                    if (data.bucketExists) {
+                        message += `<p class="text-success">✓ Bucket "${data.bucketName}" exists</p>`;
+                    } else {
+                        message += `<p class="text-warning">⚠️ Bucket "${data.bucketName}" was not found. Make sure it exists or create it.</p>`;
                     }
 
-                    alertDiv.innerHTML = `
-                        <div class="alert alert-danger">
-                            Connection test failed with the following errors:
-                            <ul>
-                                ${testData.errors.map(err => `<li>${err}</li>`).join('')}
-                            </ul>
-                            ${errorDetails}
-                        </div>
-                    `;
+                    alertDiv.innerHTML = `<div class="alert alert-success">${message}</div>`;
+                } else {
+                    throw new Error(data.error || 'Connection test failed');
                 }
             } catch (error) {
-                console.error('Error testing connection:', error);
+                console.error('Test connection error:', error);
+
+                // Create a more helpful error message
+                let errorMessage = error.message || 'Connection test failed';
+                let details = '';
+
+                // Add helpful hints based on error message
+                if (errorMessage.includes('AccessDenied')) {
+                    details = 'Check that your AWS credentials have the necessary S3 permissions.';
+                } else if (errorMessage.includes('InvalidAccessKeyId')) {
+                    details = 'Your AWS Access Key ID is invalid. Double-check your credentials.';
+                } else if (errorMessage.includes('SignatureDoesNotMatch')) {
+                    details = 'Your AWS Secret Access Key is invalid. Double-check your credentials.';
+                } else if (errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch')) {
+                    details = 'Network error. Check your internet connection and verify that the API URL is correct.';
+                } else if (errorMessage.includes('region')) {
+                    details = 'Invalid AWS region. Make sure you specified a valid region like "us-east-1".';
+                }
+
                 alertDiv.innerHTML = `
                     <div class="alert alert-danger">
-                        Error testing connection: ${error.message}
+                        <h5>Connection Test Failed</h5>
+                        <p>${errorMessage}</p>
+                        ${details ? `<p><strong>Suggestion:</strong> ${details}</p>` : ''}
+                        <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
+                                onclick="document.getElementById('test-debug-info').style.display='block'">Show Details</button>
+                        <div id="test-debug-info" class="mt-2" style="display:none">
+                            <p>API URL: ${getApiUrl('/api/test-s3')}</p>
+                            <p>Please check browser console for more details.</p>
+                        </div>
                     </div>
                 `;
             }

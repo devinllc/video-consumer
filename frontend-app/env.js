@@ -1,16 +1,18 @@
 // Environment configuration
 (function () {
     // Default API URL (local development)
-    window.API_BASE_URL = 'https://video-consumer-backend.vercel.app';
+    window.API_BASE_URL = 'http://localhost:3001';
 
     // Production URL when deployed
     if (window.location.hostname !== 'localhost') {
-        // Replace with your actual backend URL when deployed
-        window.API_BASE_URL = 'https://your-backend-url.vercel.app';
+        // Using the actual deployed backend URL
+        window.API_BASE_URL = 'https://video-consumer-backend.vercel.app';
 
-        // Uncomment and edit the line below if you want to use the hostname-based approach
-        // This is useful if your backend and frontend are on the same domain but different subdomains
-        // window.API_BASE_URL = 'https://backend.' + window.location.hostname;
+        // Detect if we're in a development environment
+        if (window.location.hostname.includes('vercel.app')) {
+            // For preview deployments
+            console.log('Running in Vercel preview environment');
+        }
     }
 
     console.log('API Base URL:', window.API_BASE_URL);

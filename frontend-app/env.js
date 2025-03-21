@@ -1,7 +1,7 @@
 // Environment configuration
 (function () {
     // Default API URL (local development)
-    window.API_BASE_URL = 'http://localhost:3001';
+    window.API_BASE_URL = 'https://video-consumer-backend.vercel.app';
 
     // Production URL when deployed
     if (window.location.hostname !== 'localhost') {

@@ -410,19 +410,19 @@
         if (data.configured) {
           document.getElementById('configStatus').innerHTML = `
             <div class="alert alert-success">System configured and ready</div>
-            <a href="/config.html" class="button">Update Configuration</a>
+            <a href="/config.html" class="button" id="configBtn">Update Configuration</a>
           `;
           document.getElementById('uploadButton').disabled = false;
         } else {
           document.getElementById('configStatus').innerHTML = `
             <div class="alert alert-error">System not configured</div>
-            <a href="/config.html" class="button">Configure System</a>
+            <a href="/config.html" class="button" id="configBtn">Configure System</a>
           `;
         }
       } catch (error) {
         document.getElementById('configStatus').innerHTML = `
           <div class="alert alert-error">Error checking configuration</div>
-          <a href="/config.html" class="button">Configure System</a>
+          <a href="/config.html" class="button" id="configBtn">Configure System</a>
         `;
       }
     }
@@ -663,7 +663,20 @@
 
         if (!response.ok) {
           console.error('Transcoding error:', result);
-          throw new Error(result.error || 'Failed to start transcoding');
+
+          // Format a more helpful error message
+          let errorMessage = result.error || 'Failed to start transcoding';
+          if (result.message) {
+            errorMessage += `: ${result.message}`;
+          }
+          if (result.example) {
+            errorMessage += `\nExample: ${result.example}`;
+          }
+          if (result.details) {
+            errorMessage += `\nDetails: ${result.details}`;
+          }
+
+          throw new Error(errorMessage);
         }
 
         console.log('Transcoding response:', result);
@@ -672,7 +685,7 @@
           <div class="alert alert-success">
             Successfully started transcoding job!<br>
             Job ID: ${result.jobId}<br>
-            Task ARN: ${result.taskArn}
+            ${result.taskArn ? `Task ARN: ${result.taskArn}` : ''}
           </div>
         `;
 
@@ -682,10 +695,29 @@
       } catch (error) {
         console.error('Error:', error);
         const uploadStatus = document.getElementById('uploadStatus');
+
+        let errorMessage = error.message || 'Unknown error';
+        let helpMessage = '';
+
+        // Provide helpful guidance based on error message
+        if (errorMessage.includes('task definition')) {
+          helpMessage = 'Make sure your task definition is in the format "family:revision" (e.g., video-transcoder:1).';
+        } else if (errorMessage.includes('ECS cluster')) {
+          helpMessage = 'Verify your ECS cluster name is correct and that you have permissions to access it.';
+        } else if (errorMessage.includes('subnet')) {
+          helpMessage = 'Check that your subnet IDs are correctly formatted and exist in your AWS account.';
+        } else if (errorMessage.includes('security group')) {
+          helpMessage = 'Verify your security group IDs are correctly formatted and exist in your AWS account.';
+        } else {
+          helpMessage = 'Please check your AWS configuration and make sure the task definition is registered in ECS.';
+        }
+
         uploadStatus.innerHTML = `
           <div class="alert alert-danger">
-            Error starting transcoding: ${error.message}<br>
-            Please check your AWS configuration and make sure the task definition is registered in ECS.
+            <h5>Error starting transcoding</h5>
+            <p>${errorMessage}</p>
+            <p><strong>Suggestion:</strong> ${helpMessage}</p>
+            <button class="button" onclick="document.getElementById('configBtn').click()">Update Configuration</button>
           </div>
         `;
       }

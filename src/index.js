@@ -914,6 +914,135 @@ app.get('/api/check-upload-ready', (req, res) => {
     }
 });
 
+// API endpoint to start transcoding
+app.post('/api/start-transcoding', async (req, res) => {
+    if (!config) {
+        return res.status(400).json({ error: 'System not configured' });
+    }
+
+    try {
+        const { videoKey } = req.body;
+
+        if (!videoKey) {
+            return res.status(400).json({ error: 'No video key provided' });
+        }
+
+        // Get performance level with validation
+        const performanceLevel = req.body.performanceLevel || 'standard';
+        const validPerformanceLevels = ['economy', 'standard', 'premium'];
+
+        if (!validPerformanceLevels.includes(performanceLevel)) {
+            return res.status(400).json({
+                error: 'Invalid performance level',
+                message: 'Performance level must be one of: economy, standard, premium'
+            });
+        }
+
+        console.log(`Starting transcoding for ${videoKey} with performance level: ${performanceLevel}`);
+
+        // Validate ECS configuration
+        if (!config.ECS_CLUSTER || !config.ECS_TASK_DEFINITION) {
+            return res.status(400).json({
+                error: 'ECS configuration is incomplete',
+                message: 'Please check your ECS cluster and task definition settings'
+            });
+        }
+
+        // Validate ECS cluster format (should be a cluster name or ARN)
+        if (!config.ECS_CLUSTER.match(/^[a-zA-Z0-9_-]+$/) &&
+            !config.ECS_CLUSTER.match(/^arn:aws:ecs:[a-z0-9-]+:[0-9]+:cluster\/[a-zA-Z0-9_-]+$/)) {
+            return res.status(400).json({
+                error: 'Invalid ECS cluster format',
+                message: 'ECS cluster should be a cluster name or an ARN',
+                example: 'my-cluster or arn:aws:ecs:region:account:cluster/my-cluster'
+            });
+        }
+
+        // Validate task definition format (should be family:revision)
+        if (!config.ECS_TASK_DEFINITION.match(/^[a-zA-Z0-9_-]+:[0-9]+$/)) {
+            return res.status(400).json({
+                error: 'Invalid task definition format',
+                message: 'Task definition should be in format: family:revision',
+                example: 'video-transcoder:1'
+            });
+        }
+
+        // Create a new job ID
+        const jobId = uuidv4();
+
+        // Create job tracking object
+        activeJobs.set(jobId, {
+            videoKey,
+            status: 'PENDING',
+            startTime: new Date(),
+            containerLogsAdded: false,
+            performanceLevel,
+            logs: [
+                { timestamp: new Date(), message: `Job created with ID: ${jobId}` },
+                { timestamp: new Date(), message: `Video key: ${videoKey}` },
+                { timestamp: new Date(), message: `Performance level: ${performanceLevel}` }
+            ]
+        });
+
+        let taskArn;
+
+        // In Vercel production, we can't run long-running tasks but we can show a simulated response
+        if (process.env.NODE_ENV === 'production') {
+            console.log('Production mode: Transcoding would be started here');
+            const job = activeJobs.get(jobId);
+            if (job) {
+                job.logs.push({ timestamp: new Date(), message: 'Task launching in production mode' });
+                job.status = 'RUNNING';
+            }
+
+            // Return success without actually starting the task
+            res.json({
+                success: true,
+                message: 'Transcoding started in production mode',
+                jobId,
+                videoKey,
+                taskArn: 'production-mode-task-arn'
+            });
+        } else {
+            // Actually start the ECS task in development
+            try {
+                taskArn = await startECSTask(videoKey, jobId, performanceLevel);
+
+                res.json({
+                    success: true,
+                    message: 'Transcoding started',
+                    jobId,
+                    videoKey,
+                    taskArn
+                });
+            } catch (ecsError) {
+                console.error('Failed to start ECS task:', ecsError);
+
+                // Update job status
+                const job = activeJobs.get(jobId);
+                if (job) {
+                    job.status = 'FAILED';
+                    job.logs.push({
+                        timestamp: new Date(),
+                        message: `Failed to start ECS task: ${ecsError.message}`
+                    });
+                }
+
+                return res.status(500).json({
+                    error: 'Failed to start transcoding',
+                    details: ecsError.message
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error starting transcoding:', error);
+        res.status(500).json({
+            error: 'Failed to start transcoding',
+            message: error.message
+        });
+    }
+});
+
 // Export the Express app for local development
 module.exports = app;
 

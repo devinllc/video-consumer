@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Processing System - Instructions</title>
+    <!-- Include config.js before other scripts -->
+    <script src="config.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        header {
+            background-color: #4a6cf7;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        nav {
+            margin-top: 15px;
+        }
+
+        nav ul {
+            list-style: none;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        nav a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        nav a.active {
+            background-color: rgba(255, 255, 255, 0.3);
+            font-weight: bold;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .step {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border-left: 5px solid #4a6cf7;
+        }
+
+        .step h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+            font-size: 20px;
+        }
+
+        .step-number {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            background-color: #4a6cf7;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+
+        .code-block {
+            background-color: #f1f1f1;
+            color: #333;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: monospace;
+            border-left: 3px solid #4a6cf7;
+        }
+
+        .note {
+            background-color: #fff8e1;
+            border-left: 4px solid #ffd600;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .warning {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            margin-bottom: -1px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            background-color: #f5f5f5;
+        }
+
+        .tab.active {
+            border: 1px solid #ddd;
+            border-bottom-color: white;
+            border-radius: 4px 4px 0 0;
+            background-color: white;
+            color: #4a6cf7;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        img {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 15px 0;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #4a6cf7;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-weight: 500;
+            transition: background-color 0.3s;
+        }
+
+        .btn:hover {
+            background-color: #3a5ce5;
+        }
+
+        ol,
+        ul {
+            padding-left: 25px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            color: #4a6cf7;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+
+        .error-box {
+            background-color: #ffebee;
+            border-left: 5px solid #f44336;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .error-box h4 {
+            color: #d32f2f;
+            margin-top: 0;
+        }
+
+        .solution-box {
+            background-color: #e8f5e9;
+            border-left: 5px solid #4caf50;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .solution-box h4 {
+            color: #2e7d32;
+            margin-top: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Video Processing System</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="config.html">Configuration</a></li>
+                <li><a href="instructions.html" class="active">Instructions</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2>Simple Guide for Non-Technical Users</h2>
+        <p>This guide will help you set up and use the Video Processing System with your AWS account. We'll walk
+            through each step in simple terms.</p>
+
+        <div class="tabs">
+            <div class="tab active" onclick="openTab('setup')">Setup</div>
+            <div class="tab" onclick="openTab('usage')">Using the Service</div>
+            <div class="tab" onclick="openTab('errors')">Common Errors</div>
+        </div>
+
+        <div id="setup" class="tab-content active">
+            <div class="step">
+                <h3><span class="step-number">1</span>Create an AWS Account</h3>
+                <p>If you don't already have an AWS account, you'll need to create one:</p>
+                <ol>
+                    <li>Go to <a href="https://aws.amazon.com/" target="_blank">aws.amazon.com</a></li>
+                    <li>Click "Create an AWS Account" button in the top right</li>
+                    <li>Follow the instructions to create your account</li>
+                    <li>You'll need to provide a credit card, but many AWS services have a free tier</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Note:</strong> AWS will charge you for the resources you use. Make sure to monitor your
+                        usage to avoid unexpected charges.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3><span class="step-number">2</span>Create an S3 Bucket</h3>
+                <p>S3 is where your videos will be stored:</p>
+                <ol>
+                    <li>Sign in to the AWS Management Console</li>
+                    <li>Search for "S3" in the search bar at the top</li>
+                    <li>Click on "S3" in the search results</li>
+                    <li>Click the "Create bucket" button</li>
+                    <li>Enter a unique bucket name (like "my-video-bucket-123")</li>
+                    <li>Select your preferred region (e.g., "ap-south-1")</li>
+                    <li>Leave all other settings as default</li>
+                    <li>Scroll down and click "Create bucket"</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Remember:</strong> Write down your bucket name - you'll need it later!</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3><span class="step-number">3</span>Create IAM User and Get Access Keys</h3>
+                <p>You need access keys to let the application use your AWS account:</p>
+                <ol>
+                    <li>In the AWS Console, search for "IAM" and click on it</li>
+                    <li>In the left sidebar, click "Users"</li>
+                    <li>Click "Create user"</li>
+                    <li>Enter a name like "video-transcoder-user"</li>
+                    <li>Click "Next"</li>
+                    <li>Select "Attach policies directly"</li>
+                    <li>Search for and select these policies:
+                        <ul>
+                            <li>AmazonS3FullAccess</li>
+                            <li>AmazonECSFullAccess</li>
+                            <li>CloudWatchLogsFullAccess</li>
+                        </ul>
+                    </li>
+                    <li>Click "Next" and then "Create user"</li>
+                    <li>Click on the user you just created</li>
+                    <li>Go to the "Security credentials" tab</li>
+                    <li>Scroll down to "Access keys" and click "Create access key"</li>
+                    <li>Select "Application running outside AWS"</li>
+                    <li>Click "Next" and then "Create access key"</li>
+                    <li><strong>IMPORTANT:</strong> Download the CSV file or copy both the Access Key ID and Secret
+                        Access Key - you will need these later and won't be able to see the Secret Access Key again!
+                    </li>
+                </ol>
+                <div class="warning">
+                    <p><strong>Warning:</strong> Never share your Secret Access Key with anyone. It gives access to your
+                        AWS account and resources.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3><span class="step-number">4</span>Create an ECS Cluster</h3>
+                <p>ECS is the service that will run the video transcoding:</p>
+                <ol>
+                    <li>In the AWS Console, search for "ECS" and click on it</li>
+                    <li>Click "Clusters" in the left sidebar</li>
+                    <li>Click "Create Cluster"</li>
+                    <li>Enter "video-transcoder-cluster" as the cluster name</li>
+                    <li>Under "Infrastructure", select "AWS Fargate (serverless)"</li>
+                    <li>Leave all other settings as default</li>
+                    <li>Click "Create"</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Note:</strong> After creating the cluster, you'll see an ARN (Amazon Resource Name) that
+                        looks like: <code>arn:aws:ecs:ap-south-1:123456789012:cluster/video-transcoder-cluster</code>.
+                        Write this down - you'll need it later.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3><span class="step-number">5</span>Create a Task Definition</h3>
+                <p>This tells AWS how to run the transcoding software:</p>
+                <ol>
+                    <li>In the ECS console, click "Task Definitions" in the left sidebar</li>
+                    <li>Click "Create new Task Definition"</li>
+                    <li>Select "Fargate" as the launch type</li>
+                    <li>Click "Next step"</li>
+                    <li>Enter "video-transcoder" as the task definition name</li>
+                    <li>For "Task Role", select "ecsTaskExecutionRole" (create it if it doesn't exist)</li>
+                    <li>For "Task execution role", select "ecsTaskExecutionRole"</li>
+                    <li>Set "Task memory" to "4GB"</li>
+                    <li>Set "Task CPU" to "2 vCPU"</li>
+                    <li>Click "Add container"</li>
+                    <li>Enter "video-transcoder" as the container name</li>
+                    <li>Enter "767828740984.dkr.ecr.ap-south-1.amazonaws.com/sasa-trnscd:latest" as the image</li>
+                    <li>Set "Memory Limits" to "4096"</li>
+                    <li>Leave "Port mappings" empty</li>
+                    <li>Under "Environment variables", add:
+                        <ul>
+                            <li>Name: AWS_REGION, Value: your region (e.g., ap-south-1)</li>
+                            <li>Name: AWS_ACCESS_KEY_ID, Value: your access key</li>
+                            <li>Name: AWS_SECRET_ACCESS_KEY, Value: your secret key</li>
+                            <li>Name: BUCKET_NAME, Value: your S3 bucket name</li>
+                        </ul>
+                    </li>
+                    <li>Click "Add"</li>
+                    <li>Click "Create"</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Note:</strong> After creating the task definition, note the name and revision number
+                        (e.g., "video-transcoder:1"). You'll need this later.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3><span class="step-number">6</span>Get Your VPC Information</h3>
+                <p>You need subnet and security group information for the application:</p>
+                <ol>
+                    <li>In the AWS Console, search for "VPC" and click on it</li>
+                    <li>In the left sidebar, click "Subnets"</li>
+                    <li>Note the IDs of at least two subnets (they look like "subnet-1234abcd")</li>
+                    <li>In the left sidebar, click "Security Groups"</li>
+                    <li>Note the ID of the default security group (it looks like "sg-1234abcd")</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Note:</strong> Write down the subnet IDs and security group ID - you'll need these for
+                        configuration.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3><span class="step-number">7</span>Configure the Application</h3>
+                <p>Now you'll set up the application with all the information you've gathered:</p>
+                <ol>
+                    <li>Go to the Configuration page: <a href="config.html">Open Configuration</a></li>
+                    <li>Fill in the following details:
+                        <ul>
+                            <li><strong>AWS Region:</strong> Your AWS region (e.g., ap-south-1)</li>
+                            <li><strong>AWS Access Key ID:</strong> Your IAM user's access key</li>
+                            <li><strong>AWS Secret Access Key:</strong> Your IAM user's secret key</li>
+                            <li><strong>S3 Bucket Name:</strong> The name of your S3 bucket</li>
+                            <li><strong>ECS Cluster:</strong> The ARN of your ECS cluster (e.g.,
+                                arn:aws:ecs:ap-south-1:<strong>YOUR-ACCOUNT-ID</strong>:cluster/video-transcoder-cluster)
+                            </li>
+                            <li><strong>ECS Task Definition:</strong> Your task definition name and revision (e.g.,
+                                video-transcoder:1)</li>
+                            <li><strong>ECS Subnets:</strong> Your subnet IDs, separated by commas (e.g.,
+                                subnet-1234abcd,subnet-5678efgh)</li>
+                            <li><strong>ECS Security Groups:</strong> Your security group ID (e.g., sg-1234abcd)</li>
+                        </ul>
+                    </li>
+                    <li><strong>Important:</strong> Make sure your subnets are in a VPC with internet access through a
+                        NAT Gateway or Internet Gateway, as the application uses Fargate launch type which requires
+                        internet access.</li>
+                    <li>Click "Test Connection" to verify your configuration</li>
+                    <li>If the test is successful, click "Save Configuration"</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Note about Subnets:</strong> For Fargate tasks, your subnets must have internet access.
+                        If you're using private subnets, they must have a route to a NAT Gateway. If you're using public
+                        subnets, they must have a route to an Internet Gateway.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="usage" class="tab-content">
+            <div class="step">
+                <h3><span class="step-number">1</span>Upload a Video</h3>
+                <ol>
+                    <li>Go to the Home page: <a href="index.html">Open Home</a></li>
+                    <li>Click "Choose File" to select a video file from your computer</li>
+                    <li>Click "Upload" to upload the video to your S3 bucket</li>
+                    <li>Wait for the upload to complete - you'll see a success message when it's done</li>
+                    <li>Once the upload is complete, click "Start Transcoding"</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Note:</strong> The maximum file size is 500MB. Larger files may fail to upload.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3><span class="step-number">2</span>Monitor Your Transcoding Job</h3>
+                <ol>
+                    <li>After starting a transcoding job, you'll be automatically redirected to the Jobs tab</li>
+                    <li>Here you can see the status of all your transcoding jobs</li>
+                    <li>The status will be one of:
+                        <ul>
+                            <li><strong>PENDING:</strong> The job is waiting to start</li>
+                            <li><strong>RUNNING:</strong> The job is currently processing your video</li>
+                            <li><strong>COMPLETED:</strong> The job has finished successfully</li>
+                            <li><strong>FAILED:</strong> The job encountered an error</li>
+                        </ul>
+                    </li>
+                    <li>Click on a job to view its details and logs</li>
+                    <li>The status will update automatically as the job progresses</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Note:</strong> Transcoding can take several minutes depending on the size and length of
+                        your video.</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3><span class="step-number">3</span>View Your Transcoded Videos</h3>
+                <ol>
+                    <li>Once a job is completed, you can view the transcoded video</li>
+                    <li>Go to the Videos tab</li>
+                    <li>Select the video you want to watch</li>
+                    <li>Use the quality selector to switch between different resolutions (360p, 480p, 720p, 1080p)</li>
+                </ol>
+                <div class="note">
+                    <p><strong>Note:</strong> The transcoded videos are stored in your S3 bucket in the
+                        <code>output/[video-id]/</code> directory. The HLS playlist is at
+                        <code>output/[video-id]/master.m3u8</code>.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div id="errors" class="tab-content">
+            <h2>Common Errors and Solutions</h2>
+
+            <div class="note" style="background-color: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 30px;">
+                <h3 style="color: #2e7d32; margin-top: 0;">Important: AWS Account ID Consistency</h3>
+                <p>Many errors occur because of <strong>AWS account ID mismatches</strong>. Your AWS account ID must be
+                    consistent across:</p>
+                <ul>
+                    <li>The AWS credentials (Access Key and Secret Key) you're using</li>
+                    <li>The ECS cluster ARN in your configuration</li>
+                    <li>The task definition ARN (if using the full ARN)</li>
+                    <li>The ECR repository in your task definition's container image</li>
+                </ul>
+                <p>Your AWS account ID is a 12-digit number (e.g., <code>767828740984</code>) that you can find by
+                    clicking your username in the top-right corner of the AWS Console.</p>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Account ID mismatch"</h4>
+                <p>This error occurs when the AWS account ID in your ECS cluster ARN doesn't match the account ID
+                    associated with your AWS credentials.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Find your correct AWS account ID:
+                            <ul>
+                                <li>Log into the AWS Console</li>
+                                <li>Click on your username in the top-right corner</li>
+                                <li>Your 12-digit account ID is displayed in the dropdown (e.g., 767828740984)</li>
+                            </ul>
+                        </li>
+                        <li>Update your ECS cluster ARN in the configuration:
+                            <ul>
+                                <li>Go to the Configuration page</li>
+                                <li>Find the ECS Cluster field</li>
+                                <li>Make sure it uses your correct account ID:
+                                    <code>arn:aws:ecs:ap-south-1:<strong>YOUR-ACCOUNT-ID</strong>:cluster/video-transcoder-cluster</code>
+                                </li>
+                                <li>Replace <strong>YOUR-ACCOUNT-ID</strong> with your actual 12-digit account ID</li>
+                            </ul>
+                        </li>
+                        <li>Make sure your AWS credentials (Access Key and Secret Key) belong to the same AWS account
+                        </li>
+                        <li>Click "Test Connection" to verify the fix</li>
+                    </ol>
+                    <p><strong>Important:</strong> The account ID in your ECS cluster ARN <em>must</em> match the
+                        account ID of the AWS credentials you're using.</p>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "SignatureDoesNotMatch: The request signature we calculated does not match the signature you
+                    provided"</h4>
+                <p>This error means there's a problem with your AWS credentials.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Double-check that you've entered your AWS Access Key ID correctly</li>
+                        <li>Make sure your AWS Secret Access Key is correct (no extra spaces)</li>
+                        <li>Check that your computer's date and time are accurate</li>
+                        <li>Try creating new access keys in the IAM console</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Invalid subnet configuration" or "Invalid security group configuration"</h4>
+                <p>This error occurs when the subnet IDs or security group ID you provided don't exist or aren't
+                    accessible.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Go to the AWS VPC console and verify that the subnet IDs exist</li>
+                        <li>Check that the security group ID exists</li>
+                        <li>Make sure all subnets and the security group are in the same VPC</li>
+                        <li>Ensure you have at least two subnets in different availability zones</li>
+                        <li>Update your configuration with the correct IDs</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Failed to upload video"</h4>
+                <p>This error occurs when the video upload to S3 fails.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Check that your S3 bucket exists and is accessible</li>
+                        <li>Verify that your AWS credentials have permission to write to the bucket</li>
+                        <li>Ensure the video file is not too large (limit is 500MB)</li>
+                        <li>Try uploading a smaller video file to test</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Failed to start transcoding"</h4>
+                <p>This error occurs when the transcoding job fails to start.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Check the job logs for detailed error messages</li>
+                        <li>Verify that your ECS cluster and task definition are correctly configured</li>
+                        <li>Make sure your IAM user has the necessary permissions</li>
+                        <li>Check that your subnets have internet access (for Fargate tasks)</li>
+                        <li>Verify that the task definition uses the correct container image</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "AWS account is blocked"</h4>
+                <p>This error occurs when there's an issue with your AWS account status.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Check your AWS account status in the AWS Console</li>
+                        <li>Verify that your payment method is valid</li>
+                        <li>Contact AWS Support if you believe your account was blocked in error</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Configuration missing"</h4>
+                <p>This error occurs when you try to use the application before configuring it.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Go to the Configuration page</li>
+                        <li>Fill in all the required fields</li>
+                        <li>Click "Save Configuration"</li>
+                        <li>Try your operation again</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Task Definition Account ID mismatch"</h4>
+                <p>This error can also occur when the account ID in your task definition doesn't match your AWS
+                    credentials.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>In the Configuration page, check your Task Definition field</li>
+                        <li>If you're using a full ARN (like
+                            <code>arn:aws:ecs:ap-south-1:767828740984:task-definition/video-transcoder:1</code>), make
+                            sure the account ID matches your AWS credentials
+                        </li>
+                        <li>The simplest solution is to use just the task definition name and revision instead of the
+                            full ARN:
+                            <ul>
+                                <li>Use: <code>video-transcoder:1</code></li>
+                                <li>Instead of:
+                                    <code>arn:aws:ecs:ap-south-1:767828740984:task-definition/video-transcoder:1</code>
+                                </li>
+                            </ul>
+                        </li>
+                        <li>Click "Test Connection" to verify the fix</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Container Image Account ID mismatch"</h4>
+                <p>This error can occur when the account ID in the container image URL doesn't match your AWS
+                    credentials.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>When creating your task definition, check the container image field</li>
+                        <li>The image URL should be:
+                            <code>767828740984.dkr.ecr.ap-south-1.amazonaws.com/sasa-trnscd:latest</code>
+                        </li>
+                        <li>If you're using your own AWS account, you need to:
+                            <ul>
+                                <li>Create your own ECR repository named "sasa-trnscd"</li>
+                                <li>Push the image to your repository</li>
+                                <li>Update the image URL to use your account ID:
+                                    <code>YOUR-ACCOUNT-ID.dkr.ecr.ap-south-1.amazonaws.com/sasa-trnscd:latest</code>
+                                </li>
+                            </ul>
+                        </li>
+                        <li>If you're using the provided account, make sure your AWS credentials match the account ID in
+                            the image URL</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Assign public IP is not supported for this launch type"</h4>
+                <p>This error occurs when trying to run an ECS task with a network configuration that's incompatible
+                    with your launch type.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Go to the Configuration page</li>
+                        <li>Make sure your ECS task definition is using the correct launch type:
+                            <ul>
+                                <li>For EC2 launch type: Remove the "assignPublicIp" setting or set it to "DISABLED"
+                                </li>
+                                <li>For Fargate launch type: Make sure your subnets have internet access through a NAT
+                                    Gateway or Internet Gateway</li>
+                            </ul>
+                        </li>
+                        <li>If you're using Fargate (recommended), update your configuration:
+                            <ul>
+                                <li>Make sure your VPC has a NAT Gateway or Internet Gateway</li>
+                                <li>Ensure your subnets are properly configured for public IP assignment</li>
+                                <li>In the Configuration page, add <code>FARGATE</code> as the Launch Type</li>
+                            </ul>
+                        </li>
+                        <li>If you're using EC2, update your task definition to use EC2 launch type and disable public
+                            IP assignment</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="error-box">
+                <h4>Error: "Task stuck in PROVISIONING state"</h4>
+                <p>This error occurs when an ECS task gets stuck in the PROVISIONING state and doesn't progress to
+                    RUNNING.</p>
+
+                <div class="solution-box">
+                    <h4>Solution:</h4>
+                    <ol>
+                        <li>Check your VPC and subnet configuration:
+                            <ul>
+                                <li>Make sure your subnets have internet access (either through NAT Gateway or Internet
+                                    Gateway)</li>
+                                <li>Verify that your security groups allow outbound traffic</li>
+                                <li>Ensure your VPC has DNS resolution enabled</li>
+                            </ul>
+                        </li>
+                        <li>Check your ECR repository permissions:
+                            <ul>
+                                <li>Make sure your task execution role has permission to pull from ECR</li>
+                                <li>Verify that the image exists in the specified ECR repository</li>
+                            </ul>
+                        </li>
+                        <li>Check ECS service quotas:
+                            <ul>
+                                <li>You might have reached your Fargate quota limit</li>
+                                <li>Go to Service Quotas in the AWS Console to check your limits</li>
+                            </ul>
+                        </li>
+                        <li>Try stopping the task and starting a new one</li>
+                    </ol>
+                    <p><strong>Understanding ECS Task States:</strong></p>
+                    <ul>
+                        <li><strong>PROVISIONING</strong>: AWS is preparing resources for your task</li>
+                        <li><strong>PENDING</strong>: Resources are ready, but the container is not yet started</li>
+                        <li><strong>RUNNING</strong>: The container is running and executing your application</li>
+                        <li><strong>STOPPED</strong>: The task has completed or failed</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openTab(tabName) {
+            // Hide all tab contents
+            var tabContents = document.getElementsByClassName("tab-content");
+            for (var i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove("active");
+            }
+
+            // Remove active class from all tabs
+            var tabs = document.getElementsByClassName("tab");
+            for (var i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove("active");
+            }
+
+            // Show the selected tab content and mark the tab as active
+            document.getElementById(tabName).classList.add("active");
+
+            // Find and activate the clicked tab
+            var tabs = document.getElementsByClassName("tab");
+            for (var i = 0; i < tabs.length; i++) {
+                if (tabs[i].getAttribute("onclick").includes(tabName)) {
+                    tabs[i].classList.add("active");
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>

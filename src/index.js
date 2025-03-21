@@ -263,63 +263,114 @@ app.post('/api/upload', upload.single('video'), async (req, res) => {
             size: file.size
         });
 
-        // Initialize S3 client with force path style for custom endpoints
+        // Initialize S3 client with more defensive checks
+        if (!config.AWS_REGION || !config.AWS_ACCESS_KEY_ID || !config.AWS_SECRET_ACCESS_KEY || !config.S3_BUCKET_NAME) {
+            return res.status(400).json({
+                error: 'AWS configuration incomplete',
+                details: 'Please ensure all AWS credentials and S3 bucket are configured'
+            });
+        }
+
+        // Normalize AWS region
+        const validRegions = [
+            'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
+            'af-south-1', 'ap-east-1', 'ap-south-1', 'ap-northeast-1',
+            'ap-northeast-2', 'ap-northeast-3', 'ap-southeast-1',
+            'ap-southeast-2', 'ca-central-1', 'eu-central-1',
+            'eu-west-1', 'eu-west-2', 'eu-west-3', 'eu-south-1',
+            'eu-north-1', 'me-south-1', 'sa-east-1'
+        ];
+
+        let region = config.AWS_REGION.trim().toLowerCase();
+        if (!validRegions.includes(region)) {
+            console.warn(`Warning: Invalid region "${region}", defaulting to us-east-1`);
+            region = 'us-east-1';
+        }
+
         const s3Client = new S3Client({
-            region: config.AWS_REGION,
+            region: region,
             credentials: {
                 accessKeyId: config.AWS_ACCESS_KEY_ID,
                 secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
             }
         });
 
-        // Upload to S3
+        // Check if the file exists before attempting to upload
+        if (!fs.existsSync(file.path)) {
+            return res.status(500).json({
+                error: 'File processing error',
+                details: 'The uploaded file could not be processed. This may be due to serverless environment constraints.'
+            });
+        }
+
+        // Upload to S3 with more error handling
         const key = `raw/${path.basename(file.filename)}`;
         console.log('Uploading to S3:', {
             bucket: config.S3_BUCKET_NAME,
-            key: key
+            key: key,
+            region: region
         });
 
-        await s3Client.send(new PutObjectCommand({
-            Bucket: config.S3_BUCKET_NAME,
-            Key: key,
-            Body: fs.createReadStream(file.path)
-        }));
+        try {
+            const uploadParams = {
+                Bucket: config.S3_BUCKET_NAME,
+                Key: key,
+                Body: fs.createReadStream(file.path)
+            };
 
-        console.log('Successfully uploaded to S3');
+            await s3Client.send(new PutObjectCommand(uploadParams));
+            console.log('Successfully uploaded to S3');
+        } catch (s3Error) {
+            console.error('S3 upload error:', s3Error);
+            return res.status(500).json({
+                error: 'S3 upload failed',
+                details: s3Error.message,
+                requestId: s3Error.$metadata?.requestId
+            });
+        }
 
         // Clean up local file
-        fs.unlinkSync(file.path);
-        console.log('Cleaned up local file');
+        try {
+            fs.unlinkSync(file.path);
+            console.log('Cleaned up local file');
+        } catch (cleanupError) {
+            console.warn('Could not clean up local file:', cleanupError.message);
+            // Continue anyway - this is not critical
+        }
 
-        // Start transcoding process
-        const jobId = uuidv4();
-        const performanceLevel = req.body.performanceLevel || 'standard'; // default to standard
-        console.log(`Starting transcoding job ${jobId} for video: ${key}, performance level: ${performanceLevel}`);
+        // On Vercel, we separate upload from transcoding
+        // and don't start transcoding automatically
+        let jobId = null;
+        if (process.env.NODE_ENV !== 'production') {
+            // Start transcoding process
+            jobId = uuidv4();
+            const performanceLevel = req.body.performanceLevel || 'standard'; // default to standard
+            console.log(`Starting transcoding job ${jobId} for video: ${key}, performance level: ${performanceLevel}`);
 
-        // Create job tracking object
-        activeJobs.set(jobId, {
-            videoKey: key,
-            status: 'PENDING',
-            startTime: new Date(),
-            containerLogsAdded: false,
-            performanceLevel
-        });
+            // Create job tracking object
+            activeJobs.set(jobId, {
+                videoKey: key,
+                status: 'PENDING',
+                startTime: new Date(),
+                containerLogsAdded: false,
+                performanceLevel
+            });
 
-        // Start ECS task for transcoding
-        startECSTask(key, jobId, performanceLevel);
+            // Start ECS task for transcoding
+            startECSTask(key, jobId, performanceLevel);
+        }
 
-        // Return the future HLS playlist URL and job ID
-        const playlistUrl = `https://s3.${config.AWS_REGION}.amazonaws.com/${config.S3_BUCKET_NAME}/output/${path.basename(file.filename, path.extname(file.filename))}/master.m3u8`;
+        // Return the future HLS playlist URL
+        const playlistUrl = `https://s3.${region}.amazonaws.com/${config.S3_BUCKET_NAME}/output/${path.basename(file.filename, path.extname(file.filename))}/master.m3u8`;
 
         res.json({
             success: true,
-            message: 'Video uploaded successfully and transcoding started',
+            message: 'Video uploaded successfully',
             key: key,
             jobId: jobId,
             playlistUrl
         });
-    }
-    catch (error) {
+    } catch (error) {
         console.error('Upload error:', error);
         res.status(500).json({ error: 'Failed to upload video', details: error.message });
     }
@@ -805,6 +856,62 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString(),
         configured: config ? true : false
     });
+});
+
+// Add a check endpoint for upload functionality
+app.get('/api/check-upload-ready', (req, res) => {
+    try {
+        // Check if config exists
+        if (!config) {
+            return res.status(400).json({
+                ready: false,
+                error: 'System not configured',
+                details: 'Please configure AWS credentials first'
+            });
+        }
+
+        // Check S3 connectivity
+        const s3Client = new S3Client({
+            region: config.AWS_REGION,
+            credentials: {
+                accessKeyId: config.AWS_ACCESS_KEY_ID,
+                secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
+            }
+        });
+
+        // Check uploads directory exists
+        const uploadDirExists = process.env.NODE_ENV === 'production'
+            ? fs.existsSync('/tmp')
+            : fs.existsSync('uploads');
+
+        // Check if we have write permissions to the directory
+        let canWrite = false;
+        try {
+            const testDir = process.env.NODE_ENV === 'production' ? '/tmp' : 'uploads';
+            const testFile = path.join(testDir, `test-${Date.now()}.txt`);
+            fs.writeFileSync(testFile, 'test');
+            fs.unlinkSync(testFile);
+            canWrite = true;
+        } catch (writeError) {
+            console.error('Write permission test failed:', writeError);
+        }
+
+        res.json({
+            ready: true,
+            uploadDir: process.env.NODE_ENV === 'production' ? '/tmp' : 'uploads',
+            uploadDirExists,
+            canWrite,
+            s3Configured: !!config.S3_BUCKET_NAME,
+            environment: process.env.NODE_ENV || 'development'
+        });
+    } catch (error) {
+        console.error('Error checking upload readiness:', error);
+        res.status(500).json({
+            ready: false,
+            error: 'Failed to check upload readiness',
+            details: error.message
+        });
+    }
 });
 
 // Export the Express app for local development

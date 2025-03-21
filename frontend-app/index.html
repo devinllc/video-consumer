@@ -549,11 +549,38 @@
       handleFiles(this.files);
     });
 
-    // Existing upload functionality
+    // Check if upload is ready
+    async function checkUploadReady() {
+      try {
+        const response = await fetch(getApiUrl('/api/check-upload-ready'));
+
+        if (!response.ok) {
+          console.error('Upload readiness check failed:', response.status);
+          return false;
+        }
+
+        const result = await response.json();
+        console.log('Upload readiness check:', result);
+
+        return result.ready;
+      } catch (error) {
+        console.error('Error checking upload readiness:', error);
+        return false;
+      }
+    }
+
+    // Update upload button
     uploadButton.addEventListener('click', async () => {
       const file = videoFile.files[0];
       if (!file) {
         showStatus('Please select a video file', 'error');
+        return;
+      }
+
+      // Check if upload is ready
+      const isReady = await checkUploadReady();
+      if (!isReady) {
+        showStatus('Upload service is not ready. Please ensure the system is properly configured.', 'error');
         return;
       }
 
@@ -564,13 +591,16 @@
         uploadButton.disabled = true;
         showStatus('Uploading...', 'info');
 
-        const response = await fetch('/api/upload', {
+        // Use the getApiUrl function to get the correct API URL
+        const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.UPLOAD), {
           method: 'POST',
           body: formData
         });
 
         if (!response.ok) {
-          throw new Error('Upload failed');
+          const errorText = await response.text();
+          console.error('Upload failed:', response.status, errorText);
+          throw new Error(`Upload failed: ${response.status} ${errorText.substring(0, 100)}`);
         }
 
         const result = await response.json();
@@ -592,6 +622,7 @@
           document.getElementById('video-key').value = result.key;
         }
       } catch (error) {
+        console.error('Upload error:', error);
         showStatus('Upload failed: ' + error.message, 'error');
       } finally {
         uploadButton.disabled = false;

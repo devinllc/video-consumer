@@ -30,6 +30,13 @@
             ]
         },
         {
+            "src": "/api/check-upload-ready",
+            "dest": "src/index.js",
+            "methods": [
+                "GET"
+            ]
+        },
+        {
             "src": "/api/jobs",
             "dest": "src/index.js",
             "methods": [
@@ -55,6 +62,13 @@
             "dest": "src/index.js",
             "methods": [
                 "GET"
+            ]
+        },
+        {
+            "src": "/api/start-transcoding",
+            "dest": "src/index.js",
+            "methods": [
+                "POST"
             ]
         },
         {

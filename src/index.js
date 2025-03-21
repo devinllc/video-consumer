@@ -729,19 +729,29 @@ async function startECSTask(videoKey, jobId, performanceLevel = 'standard') {
             }
         });
 
-        // Prepare task definition
+        // Normalize task definition without validation 
+        // (use as-is to maintain compatibility with existing setup)
         const taskDefinition = config.ECS_TASK_DEFINITION;
+        console.log(`Using task definition: ${taskDefinition}`);
 
         // Prepare subnets and security groups
         const subnets = config.ECS_SUBNETS.split(',').map(s => s.trim());
         const securityGroups = config.ECS_SECURITY_GROUPS.split(',').map(sg => sg.trim());
 
+        // Log the networking configuration
+        console.log(`Using subnets: ${subnets.join(', ')}`);
+        console.log(`Using security groups: ${securityGroups.join(', ')}`);
+
         // Determine CPU and memory based on performance level
         let cpu, memory;
         switch (performanceLevel) {
-            case 'high':
+            case 'premium':
                 cpu = '2048';
                 memory = '4096';
+                break;
+            case 'economy':
+                cpu = '512';
+                memory = '1024';
                 break;
             case 'standard':
             default:
@@ -766,7 +776,7 @@ async function startECSTask(videoKey, jobId, performanceLevel = 'standard') {
             overrides: {
                 containerOverrides: [
                     {
-                        name: 'video-transcoder',
+                        name: 'video-transcoder', // This should match your container name in the task definition
                         environment: [
                             {
                                 name: 'INPUT_FILE',
@@ -795,6 +805,19 @@ async function startECSTask(videoKey, jobId, performanceLevel = 'standard') {
                 memory
             }
         };
+
+        // Log the task parameters
+        console.log('Starting ECS task with params:', JSON.stringify({
+            cluster: params.cluster,
+            taskDefinition: params.taskDefinition,
+            count: params.count,
+            launchType: params.launchType,
+            networkConfig: {
+                subnets: params.networkConfiguration.awsvpcConfiguration.subnets,
+                securityGroups: params.networkConfiguration.awsvpcConfiguration.securityGroups,
+                assignPublicIp: params.networkConfiguration.awsvpcConfiguration.assignPublicIp
+            }
+        }, null, 2));
 
         // Start the task
         const runTaskResult = await ecsClient.send(new RunTaskCommand(params));
@@ -948,22 +971,23 @@ app.post('/api/start-transcoding', async (req, res) => {
             });
         }
 
-        // Validate ECS cluster format (should be a cluster name or ARN)
-        if (!config.ECS_CLUSTER.match(/^[a-zA-Z0-9_-]+$/) &&
-            !config.ECS_CLUSTER.match(/^arn:aws:ecs:[a-z0-9-]+:[0-9]+:cluster\/[a-zA-Z0-9_-]+$/)) {
+        // More flexible validation for ECS cluster format
+        // Accept any non-empty string for compatibility
+        if (!config.ECS_CLUSTER.trim()) {
             return res.status(400).json({
                 error: 'Invalid ECS cluster format',
-                message: 'ECS cluster should be a cluster name or an ARN',
+                message: 'ECS cluster cannot be empty',
                 example: 'my-cluster or arn:aws:ecs:region:account:cluster/my-cluster'
             });
         }
 
-        // Validate task definition format (should be family:revision)
-        if (!config.ECS_TASK_DEFINITION.match(/^[a-zA-Z0-9_-]+:[0-9]+$/)) {
+        // More flexible validation for task definition format
+        // Accept any non-empty string for compatibility
+        if (!config.ECS_TASK_DEFINITION.trim()) {
             return res.status(400).json({
                 error: 'Invalid task definition format',
-                message: 'Task definition should be in format: family:revision',
-                example: 'video-transcoder:1'
+                message: 'Task definition cannot be empty',
+                example: 'Enter your task definition name or ARN'
             });
         }
 

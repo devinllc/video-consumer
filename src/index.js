@@ -1010,62 +1010,175 @@ app.post('/api/start-transcoding', async (req, res) => {
 
         let taskArn;
 
+        // Check if we're in production mode (e.g., on Vercel)
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+        console.log(`[Transcoding Job] Environment: ${process.env.NODE_ENV}, Vercel: ${process.env.VERCEL}`);
+        console.log(`[Transcoding Job] Running in ${isProduction ? 'production' : 'development'} mode`);
+
         // In Vercel production, we can't run long-running tasks but we can show a simulated response
-        if (process.env.NODE_ENV === 'production') {
-            console.log('Production mode: Transcoding would be started here');
+        if (isProduction) {
+            console.log('[Transcoding Job] Production mode detected: Simulating transcoding task');
             const job = activeJobs.get(jobId);
             if (job) {
-                job.logs.push({ timestamp: new Date(), message: 'Task launching in production mode' });
+                job.logs.push({
+                    timestamp: new Date(),
+                    message: 'Task launching in production mode (simulated - no actual AWS task will be created)'
+                });
                 job.status = 'RUNNING';
+                job.taskArn = 'production-mode-task-arn'; // A marker to indicate simulation
             }
 
             // Return success without actually starting the task
             res.json({
                 success: true,
-                message: 'Transcoding started in production mode',
+                message: 'Transcoding started in production mode (simulated)',
                 jobId,
                 videoKey,
-                taskArn: 'production-mode-task-arn'
+                taskArn: 'production-mode-task-arn',
+                note: 'Running in production mode - No actual AWS task will be created due to serverless limitations'
             });
+
+            // Simulate job progress
+            simulateTaskProgress(jobId);
         } else {
             // Actually start the ECS task in development
             try {
+                console.log('[Transcoding Job] Development mode: Attempting to start real ECS task');
+                console.log('[Transcoding Job] ECS Configuration:');
+                console.log(`  - Cluster: ${config.ECS_CLUSTER}`);
+                console.log(`  - Task Definition: ${config.ECS_TASK_DEFINITION}`);
+                console.log(`  - Subnets: ${config.ECS_SUBNETS}`);
+                console.log(`  - Security Groups: ${config.ECS_SECURITY_GROUPS}`);
+
                 taskArn = await startECSTask(videoKey, jobId, performanceLevel);
+                console.log(`[Transcoding Job] ECS task started successfully with ARN: ${taskArn}`);
 
                 res.json({
                     success: true,
-                    message: 'Transcoding started',
+                    message: 'Transcoding started with actual AWS ECS task',
                     jobId,
                     videoKey,
                     taskArn
                 });
-            } catch (ecsError) {
-                console.error('Failed to start ECS task:', ecsError);
+            } catch (taskError) {
+                console.error('[Transcoding Job] Failed to start ECS task:', taskError);
 
-                // Update job status
+                // Update job with error information
                 const job = activeJobs.get(jobId);
                 if (job) {
                     job.status = 'FAILED';
                     job.logs.push({
                         timestamp: new Date(),
-                        message: `Failed to start ECS task: ${ecsError.message}`
+                        message: `Failed to start ECS task: ${taskError.message}`
                     });
+
+                    // Additional logging for common AWS errors
+                    if (taskError.code === 'InvalidParameterException') {
+                        job.logs.push({
+                            timestamp: new Date(),
+                            message: 'Check your ECS configuration: cluster, task definition, subnets, security groups'
+                        });
+                    } else if (taskError.code === 'AccessDeniedException') {
+                        job.logs.push({
+                            timestamp: new Date(),
+                            message: 'AWS access denied. Check IAM permissions for ECS:RunTask'
+                        });
+                    }
                 }
 
+                // Return error to client
                 return res.status(500).json({
-                    error: 'Failed to start transcoding',
-                    details: ecsError.message
+                    error: 'Failed to start transcoding task',
+                    message: taskError.message,
+                    code: taskError.code,
+                    jobId,
+                    videoKey
                 });
             }
         }
     } catch (error) {
-        console.error('Error starting transcoding:', error);
-        res.status(500).json({
-            error: 'Failed to start transcoding',
-            message: error.message
+        console.error('[Transcoding Job] Unexpected error in /api/start-transcoding:', error);
+        return res.status(500).json({
+            error: 'Internal server error',
+            message: error.message,
+            stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
         });
     }
 });
+
+// Function to simulate task progress for demonstration purposes
+function simulateTaskProgress(jobId) {
+    const job = activeJobs.get(jobId);
+    if (!job) return;
+
+    console.log(`[Simulation] Starting simulated task progress for job ${jobId}`);
+
+    // Simulate downloading the video
+    setTimeout(() => {
+        if (job.status !== 'FAILED') {
+            job.logs.push({
+                timestamp: new Date(),
+                message: '[Container] Downloading original video from S3'
+            });
+        }
+    }, 2000);
+
+    // Simulate download complete
+    setTimeout(() => {
+        if (job.status !== 'FAILED') {
+            job.logs.push({
+                timestamp: new Date(),
+                message: '[Container] Downloaded original video successfully'
+            });
+        }
+    }, 5000);
+
+    // Simulate starting transcoding
+    setTimeout(() => {
+        if (job.status !== 'FAILED') {
+            job.logs.push({
+                timestamp: new Date(),
+                message: '[Container] Starting transcoding process'
+            });
+        }
+    }, 7000);
+
+    // Simulate progress updates
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        if (job.status === 'FAILED' || progress >= 100) {
+            clearInterval(progressInterval);
+            return;
+        }
+
+        progress += 10;
+        job.logs.push({
+            timestamp: new Date(),
+            message: `[Container] Transcoding progress: ${progress}%`
+        });
+
+        if (progress >= 100) {
+            // Complete the task
+            job.status = 'COMPLETED';
+            job.logs.push({
+                timestamp: new Date(),
+                message: 'Task completed successfully'
+            });
+            job.logs.push({
+                timestamp: new Date(),
+                message: '[Container] All transcoding tasks completed'
+            });
+            job.logs.push({
+                timestamp: new Date(),
+                message: '[Container] Output files available at: s3://BUCKET_NAME/output/VIDEO_KEY/'
+            });
+            job.logs.push({
+                timestamp: new Date(),
+                message: 'Note: In production mode, no actual transcoding is performed due to serverless limitations'
+            });
+        }
+    }, 3000);
+}
 
 // Export the Express app for local development
 module.exports = app;

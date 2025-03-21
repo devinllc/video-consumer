@@ -248,7 +248,8 @@
         <div class="tabs">
             <div class="tab active" onclick="openTab('setup')">Setup</div>
             <div class="tab" onclick="openTab('usage')">Using the Service</div>
-            <div class="tab" onclick="openTab('errors')">Common Errors</div>
+            <div class="tab" onclick="openTab('limitations')">Serverless Limitations</div>
+            <div class="tab" onclick="openTab('troubleshooting')">Troubleshooting</div>
         </div>
 
         <div id="setup" class="tab-content active">
@@ -477,273 +478,89 @@
             </div>
         </div>
 
-        <div id="errors" class="tab-content">
-            <h2>Common Errors and Solutions</h2>
+        <div id="limitations" class="tab-content">
+            <h2>Serverless Limitations</h2>
 
-            <div class="note" style="background-color: #e8f5e9; border-left: 4px solid #4caf50; margin-bottom: 30px;">
-                <h3 style="color: #2e7d32; margin-top: 0;">Important: AWS Account ID Consistency</h3>
-                <p>Many errors occur because of <strong>AWS account ID mismatches</strong>. Your AWS account ID must be
-                    consistent across:</p>
+            <div class="warning">
+                <h3>Important: Transcoding Simulation in Vercel</h3>
+                <p>When deployed on Vercel or similar serverless platforms, the video transcoding functionality has
+                    significant limitations:</p>
+                <ol>
+                    <li><strong>Transcoding is simulated, not actual:</strong> In serverless mode, the application only
+                        creates job objects but doesn't actually perform video transcoding.</li>
+                    <li><strong>Execution time limits:</strong> Serverless functions typically timeout after 10-60
+                        seconds, which is insufficient for video processing.</li>
+                    <li><strong>No persistent file storage:</strong> Serverless platforms like Vercel don't provide
+                        persistent storage for large video files.</li>
+                    <li><strong>Memory and CPU constraints:</strong> Serverless functions have limited memory (usually
+                        1-4GB) and CPU resources.</li>
+                </ol>
+            </div>
+
+            <h3>How to Get Full Functionality</h3>
+            <p>To use actual video transcoding capabilities, you need to run this application on a traditional server:
+            </p>
+
+            <div class="step">
+                <h4><span class="step-number">1</span>Deploy on a Server</h4>
+                <p>Choose one of these server options:</p>
                 <ul>
-                    <li>The AWS credentials (Access Key and Secret Key) you're using</li>
-                    <li>The ECS cluster ARN in your configuration</li>
-                    <li>The task definition ARN (if using the full ARN)</li>
-                    <li>The ECR repository in your task definition's container image</li>
+                    <li>AWS EC2 instance (t3.medium or larger recommended)</li>
+                    <li>DigitalOcean Droplet (4GB RAM or higher)</li>
+                    <li>Any Linux/Windows server with Node.js installed</li>
                 </ul>
-                <p>Your AWS account ID is a 12-digit number (e.g., <code>767828740984</code>) that you can find by
-                    clicking your username in the top-right corner of the AWS Console.</p>
             </div>
 
-            <div class="error-box">
-                <h4>Error: "Account ID mismatch"</h4>
-                <p>This error occurs when the AWS account ID in your ECS cluster ARN doesn't match the account ID
-                    associated with your AWS credentials.</p>
+            <div class="step">
+                <h4><span class="step-number">2</span>Install and Configure</h4>
+                <p>On your server, run these commands:</p>
+                <div class="code-block">
+                    # Clone the repository
+                    git clone https://github.com/devinllc/video-consumer.git
+                    cd video-consumer
 
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Find your correct AWS account ID:
-                            <ul>
-                                <li>Log into the AWS Console</li>
-                                <li>Click on your username in the top-right corner</li>
-                                <li>Your 12-digit account ID is displayed in the dropdown (e.g., 767828740984)</li>
-                            </ul>
-                        </li>
-                        <li>Update your ECS cluster ARN in the configuration:
-                            <ul>
-                                <li>Go to the Configuration page</li>
-                                <li>Find the ECS Cluster field</li>
-                                <li>Make sure it uses your correct account ID:
-                                    <code>arn:aws:ecs:ap-south-1:<strong>YOUR-ACCOUNT-ID</strong>:cluster/video-transcoder-cluster</code>
-                                </li>
-                                <li>Replace <strong>YOUR-ACCOUNT-ID</strong> with your actual 12-digit account ID</li>
-                            </ul>
-                        </li>
-                        <li>Make sure your AWS credentials (Access Key and Secret Key) belong to the same AWS account
-                        </li>
-                        <li>Click "Test Connection" to verify the fix</li>
-                    </ol>
-                    <p><strong>Important:</strong> The account ID in your ECS cluster ARN <em>must</em> match the
-                        account ID of the AWS credentials you're using.</p>
+                    # Install dependencies
+                    npm install
+
+                    # Configure environment (optional)
+                    cp .env.example .env
+                    # Edit .env with your settings
+
+                    # Start the application
+                    npm start
                 </div>
             </div>
 
-            <div class="error-box">
-                <h4>Error: "SignatureDoesNotMatch: The request signature we calculated does not match the signature you
-                    provided"</h4>
-                <p>This error means there's a problem with your AWS credentials.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Double-check that you've entered your AWS Access Key ID correctly</li>
-                        <li>Make sure your AWS Secret Access Key is correct (no extra spaces)</li>
-                        <li>Check that your computer's date and time are accurate</li>
-                        <li>Try creating new access keys in the IAM console</li>
-                    </ol>
+            <div class="step">
+                <h4><span class="step-number">3</span>Access Your Server</h4>
+                <p>Once running, access the application at:</p>
+                <div class="code-block">
+                    http://YOUR_SERVER_IP:3001
                 </div>
+                <p>Then configure your AWS credentials through the UI.</p>
             </div>
 
-            <div class="error-box">
-                <h4>Error: "Invalid subnet configuration" or "Invalid security group configuration"</h4>
-                <p>This error occurs when the subnet IDs or security group ID you provided don't exist or aren't
-                    accessible.</p>
+            <h3>Alternative Solutions for Video Transcoding</h3>
+            <p>If you need video transcoding in a production environment, consider these options:</p>
+            <ul>
+                <li><strong>AWS MediaConvert:</strong> AWS's managed service specifically designed for video transcoding
+                </li>
+                <li><strong>AWS Lambda with extended timeout:</strong> For moderate transcoding tasks</li>
+                <li><strong>AWS Batch:</strong> For heavy batch processing of videos</li>
+                <li><strong>AWS Elemental:</strong> For professional-grade video processing</li>
+            </ul>
+        </div>
 
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Go to the AWS VPC console and verify that the subnet IDs exist</li>
-                        <li>Check that the security group ID exists</li>
-                        <li>Make sure all subnets and the security group are in the same VPC</li>
-                        <li>Ensure you have at least two subnets in different availability zones</li>
-                        <li>Update your configuration with the correct IDs</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="error-box">
-                <h4>Error: "Failed to upload video"</h4>
-                <p>This error occurs when the video upload to S3 fails.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Check that your S3 bucket exists and is accessible</li>
-                        <li>Verify that your AWS credentials have permission to write to the bucket</li>
-                        <li>Ensure the video file is not too large (limit is 500MB)</li>
-                        <li>Try uploading a smaller video file to test</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="error-box">
-                <h4>Error: "Failed to start transcoding"</h4>
-                <p>This error occurs when the transcoding job fails to start.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Check the job logs for detailed error messages</li>
-                        <li>Verify that your ECS cluster and task definition are correctly configured</li>
-                        <li>Make sure your IAM user has the necessary permissions</li>
-                        <li>Check that your subnets have internet access (for Fargate tasks)</li>
-                        <li>Verify that the task definition uses the correct container image</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="error-box">
-                <h4>Error: "AWS account is blocked"</h4>
-                <p>This error occurs when there's an issue with your AWS account status.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Check your AWS account status in the AWS Console</li>
-                        <li>Verify that your payment method is valid</li>
-                        <li>Contact AWS Support if you believe your account was blocked in error</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="error-box">
-                <h4>Error: "Configuration missing"</h4>
-                <p>This error occurs when you try to use the application before configuring it.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Go to the Configuration page</li>
-                        <li>Fill in all the required fields</li>
-                        <li>Click "Save Configuration"</li>
-                        <li>Try your operation again</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="error-box">
-                <h4>Error: "Task Definition Account ID mismatch"</h4>
-                <p>This error can also occur when the account ID in your task definition doesn't match your AWS
-                    credentials.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>In the Configuration page, check your Task Definition field</li>
-                        <li>If you're using a full ARN (like
-                            <code>arn:aws:ecs:ap-south-1:767828740984:task-definition/video-transcoder:1</code>), make
-                            sure the account ID matches your AWS credentials
-                        </li>
-                        <li>The simplest solution is to use just the task definition name and revision instead of the
-                            full ARN:
-                            <ul>
-                                <li>Use: <code>video-transcoder:1</code></li>
-                                <li>Instead of:
-                                    <code>arn:aws:ecs:ap-south-1:767828740984:task-definition/video-transcoder:1</code>
-                                </li>
-                            </ul>
-                        </li>
-                        <li>Click "Test Connection" to verify the fix</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="error-box">
-                <h4>Error: "Container Image Account ID mismatch"</h4>
-                <p>This error can occur when the account ID in the container image URL doesn't match your AWS
-                    credentials.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>When creating your task definition, check the container image field</li>
-                        <li>The image URL should be:
-                            <code>767828740984.dkr.ecr.ap-south-1.amazonaws.com/sasa-trnscd:latest</code>
-                        </li>
-                        <li>If you're using your own AWS account, you need to:
-                            <ul>
-                                <li>Create your own ECR repository named "sasa-trnscd"</li>
-                                <li>Push the image to your repository</li>
-                                <li>Update the image URL to use your account ID:
-                                    <code>YOUR-ACCOUNT-ID.dkr.ecr.ap-south-1.amazonaws.com/sasa-trnscd:latest</code>
-                                </li>
-                            </ul>
-                        </li>
-                        <li>If you're using the provided account, make sure your AWS credentials match the account ID in
-                            the image URL</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="error-box">
-                <h4>Error: "Assign public IP is not supported for this launch type"</h4>
-                <p>This error occurs when trying to run an ECS task with a network configuration that's incompatible
-                    with your launch type.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Go to the Configuration page</li>
-                        <li>Make sure your ECS task definition is using the correct launch type:
-                            <ul>
-                                <li>For EC2 launch type: Remove the "assignPublicIp" setting or set it to "DISABLED"
-                                </li>
-                                <li>For Fargate launch type: Make sure your subnets have internet access through a NAT
-                                    Gateway or Internet Gateway</li>
-                            </ul>
-                        </li>
-                        <li>If you're using Fargate (recommended), update your configuration:
-                            <ul>
-                                <li>Make sure your VPC has a NAT Gateway or Internet Gateway</li>
-                                <li>Ensure your subnets are properly configured for public IP assignment</li>
-                                <li>In the Configuration page, add <code>FARGATE</code> as the Launch Type</li>
-                            </ul>
-                        </li>
-                        <li>If you're using EC2, update your task definition to use EC2 launch type and disable public
-                            IP assignment</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="error-box">
-                <h4>Error: "Task stuck in PROVISIONING state"</h4>
-                <p>This error occurs when an ECS task gets stuck in the PROVISIONING state and doesn't progress to
-                    RUNNING.</p>
-
-                <div class="solution-box">
-                    <h4>Solution:</h4>
-                    <ol>
-                        <li>Check your VPC and subnet configuration:
-                            <ul>
-                                <li>Make sure your subnets have internet access (either through NAT Gateway or Internet
-                                    Gateway)</li>
-                                <li>Verify that your security groups allow outbound traffic</li>
-                                <li>Ensure your VPC has DNS resolution enabled</li>
-                            </ul>
-                        </li>
-                        <li>Check your ECR repository permissions:
-                            <ul>
-                                <li>Make sure your task execution role has permission to pull from ECR</li>
-                                <li>Verify that the image exists in the specified ECR repository</li>
-                            </ul>
-                        </li>
-                        <li>Check ECS service quotas:
-                            <ul>
-                                <li>You might have reached your Fargate quota limit</li>
-                                <li>Go to Service Quotas in the AWS Console to check your limits</li>
-                            </ul>
-                        </li>
-                        <li>Try stopping the task and starting a new one</li>
-                    </ol>
-                    <p><strong>Understanding ECS Task States:</strong></p>
-                    <ul>
-                        <li><strong>PROVISIONING</strong>: AWS is preparing resources for your task</li>
-                        <li><strong>PENDING</strong>: Resources are ready, but the container is not yet started</li>
-                        <li><strong>RUNNING</strong>: The container is running and executing your application</li>
-                        <li><strong>STOPPED</strong>: The task has completed or failed</li>
-                    </ul>
-                </div>
-            </div>
+        <div id="troubleshooting" class="tab-content">
+            <h2>Troubleshooting</h2>
+            <p>If you encounter any issues, here are some steps you can take:</p>
+            <ul>
+                <li>Check the job logs for detailed error messages</li>
+                <li>Verify that your ECS cluster and task definition are correctly configured</li>
+                <li>Make sure your IAM user has the necessary permissions</li>
+                <li>Check that your subnets have internet access (for Fargate tasks)</li>
+                <li>Verify that the task definition uses the correct container image</li>
+            </ul>
         </div>
     </div>
 

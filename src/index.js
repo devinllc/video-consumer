@@ -62,9 +62,30 @@ let config = null;
 
 // Load configuration from environment variables (Vercel) or from file
 if (process.env.NODE_ENV === 'production' && process.env.AWS_ACCESS_KEY_ID) {
+    // Validate and normalize AWS region
+    let awsRegion = process.env.AWS_REGION || '';
+    // Clean up the region (remove spaces, lowercase, etc.)
+    awsRegion = awsRegion.trim().toLowerCase();
+
+    // List of valid AWS regions
+    const validRegions = [
+        'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
+        'af-south-1', 'ap-east-1', 'ap-south-1', 'ap-northeast-1',
+        'ap-northeast-2', 'ap-northeast-3', 'ap-southeast-1',
+        'ap-southeast-2', 'ap-southeast-3', 'ca-central-1',
+        'eu-central-1', 'eu-west-1', 'eu-west-2', 'eu-west-3',
+        'eu-south-1', 'eu-north-1', 'me-south-1', 'sa-east-1'
+    ];
+
+    // Check if provided region is valid, default to us-east-1 if not
+    if (!validRegions.includes(awsRegion)) {
+        console.warn(`Invalid AWS region: ${awsRegion}. Using default region: us-east-1`);
+        awsRegion = 'us-east-1';
+    }
+
     // Use environment variables in production
     config = {
-        AWS_REGION: process.env.AWS_REGION,
+        AWS_REGION: awsRegion,
         AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
         AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
         S3_BUCKET_NAME: process.env.S3_BUCKET_NAME,
@@ -73,7 +94,8 @@ if (process.env.NODE_ENV === 'production' && process.env.AWS_ACCESS_KEY_ID) {
         ECS_SUBNETS: process.env.ECS_SUBNETS,
         ECS_SECURITY_GROUPS: process.env.ECS_SECURITY_GROUPS
     };
-    console.log('Using environment variables for configuration');
+
+    console.log('Using environment variables for configuration with region:', awsRegion);
 } else {
     // Try to load from file in development
     try {
@@ -300,6 +322,20 @@ app.get('/api/test-s3', async (_req, res) => {
             `${config.AWS_ACCESS_KEY_ID.substring(0, 4)}...${config.AWS_ACCESS_KEY_ID.substring(config.AWS_ACCESS_KEY_ID.length - 4)}` : 'missing');
         console.log('S3 bucket:', config.S3_BUCKET_NAME);
 
+        // Check if AWS_REGION is undefined or empty
+        if (!config.AWS_REGION) {
+            return res.status(400).json({
+                error: 'Invalid AWS configuration',
+                details: 'AWS_REGION is empty or undefined',
+                config: {
+                    region: config.AWS_REGION,
+                    hasAccessKey: !!config.AWS_ACCESS_KEY_ID,
+                    hasSecretKey: !!config.AWS_SECRET_ACCESS_KEY,
+                    bucket: config.S3_BUCKET_NAME
+                }
+            });
+        }
+
         // S3 connection test
         console.log('Testing S3 connection...');
         const s3Client = new S3Client({
@@ -310,9 +346,15 @@ app.get('/api/test-s3', async (_req, res) => {
             }
         });
 
+        // First, try a simple operation to verify credentials
+        console.log('Listing buckets...');
         const listResult = await s3Client.send(new ListBucketsCommand({}));
         const buckets = listResult.Buckets || [];
         const bucketExists = buckets.some(bucket => bucket.Name === config.S3_BUCKET_NAME);
+
+        if (!bucketExists) {
+            console.warn(`Warning: Bucket '${config.S3_BUCKET_NAME}' not found in your account`);
+        }
 
         res.json({
             success: true,
@@ -320,6 +362,7 @@ app.get('/api/test-s3', async (_req, res) => {
             bucketName: config.S3_BUCKET_NAME,
             region: config.AWS_REGION,
             totalBuckets: buckets.length,
+            bucketList: buckets.map(b => b.Name),
             message: 'S3 connection successful'
         });
     } catch (error) {
@@ -327,7 +370,13 @@ app.get('/api/test-s3', async (_req, res) => {
         res.status(500).json({
             error: 'S3 connection test failed',
             details: error.message,
-            requestId: error.$metadata?.requestId
+            requestId: error.$metadata?.requestId,
+            config: {
+                region: config.AWS_REGION,
+                hasAccessKey: !!config.AWS_ACCESS_KEY_ID,
+                hasSecretKey: !!config.AWS_SECRET_ACCESS_KEY,
+                bucket: config.S3_BUCKET_NAME
+            }
         });
     }
 });

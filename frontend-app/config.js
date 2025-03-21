@@ -1,36 +1,39 @@
-// API Configuration
+// API configuration
 window.API_CONFIG = {
-    // Base URL for API endpoints
-    // Change this when deploying to production
-    API_URL: window.API_BASE_URL || 'http://localhost:3001',
-
-    // API endpoints
+    // If API_BASE_URL is set in env.js, use that; otherwise fall back to default
+    BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : 'http://localhost:3001',
     ENDPOINTS: {
         UPLOAD: '/api/upload',
         TRANSCODE: '/api/start-transcoding',
-        JOBS: '/api/jobs',
         CONFIG: '/api/config',
-        TEST_CONNECTION: '/api/test-connection'
-    },
-
-    // Default performance levels
-    PERFORMANCE_LEVELS: {
-        ECONOMY: {
-            name: 'economy',
-            description: 'Economy mode uses fewer resources and costs less, but takes longer to process videos (5-10 min for a 5 min video).'
-        },
-        STANDARD: {
-            name: 'standard',
-            description: 'Standard mode balances performance and cost (2-5 min for a 5 min video).'
-        },
-        PREMIUM: {
-            name: 'premium',
-            description: 'Premium mode provides the fastest processing but at a higher cost (1-2 min for a 5 min video).'
-        }
+        JOBS: '/api/jobs',
+        JOB: '/api/jobs',
+        TEST_CONNECTION: '/api/test-connection',
+        TEST_S3: '/api/test-s3',
+        HEALTH: '/health'
     }
 };
 
-// Helper function to get full API URL
+// Function to get the full API URL
 window.getApiUrl = function (endpoint) {
-    return window.API_CONFIG.API_URL + endpoint;
+    return window.API_CONFIG.BASE_URL + endpoint;
+};
+
+// Log the configuration
+console.log('API Configuration loaded');
+
+// Default performance levels
+window.API_CONFIG.PERFORMANCE_LEVELS = {
+    ECONOMY: {
+        name: 'economy',
+        description: 'Economy mode uses fewer resources and costs less, but takes longer to process videos (5-10 min for a 5 min video).'
+    },
+    STANDARD: {
+        name: 'standard',
+        description: 'Standard mode balances performance and cost (2-5 min for a 5 min video).'
+    },
+    PREMIUM: {
+        name: 'premium',
+        description: 'Premium mode provides the fastest processing but at a higher cost (1-2 min for a 5 min video).'
+    }
 }; 

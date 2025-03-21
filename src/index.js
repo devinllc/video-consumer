@@ -114,6 +114,12 @@ if (process.env.NODE_ENV === 'production' && process.env.AWS_ACCESS_KEY_ID) {
 app.post('/api/config', (req, res) => {
     try {
         const newConfig = req.body;
+        console.log('Received config update request:', {
+            region: newConfig.AWS_REGION,
+            hasAccessKey: !!newConfig.AWS_ACCESS_KEY_ID,
+            hasSecretKey: !!newConfig.AWS_SECRET_ACCESS_KEY,
+            bucket: newConfig.S3_BUCKET_NAME
+        });
 
         // Validate required fields
         const requiredFields = [
@@ -164,17 +170,57 @@ app.post('/api/config', (req, res) => {
 
         config = newConfig;
 
-        // Save config to a file for persistence
-        fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 2));
+        // Try to save config to a file for persistence (in development only)
+        try {
+            if (process.env.NODE_ENV !== 'production') {
+                fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(config, null, 2));
+                console.log('Configuration saved to file');
+            } else {
+                console.log('Skipping config file save in production');
+            }
+        } catch (fileError) {
+            console.warn('Could not save config to file, but proceeding with in-memory config:', fileError.message);
+            // Don't fail the request if only the file save fails
+        }
 
-        res.json({
-            success: true,
-            message: 'Configuration saved successfully'
+        // Test the connection to ensure the config works
+        const s3Client = new S3Client({
+            region: config.AWS_REGION,
+            credentials: {
+                accessKeyId: config.AWS_ACCESS_KEY_ID,
+                secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
+            }
         });
+
+        // We'll make a simple listBuckets call to verify credentials
+        console.log('Testing S3 credentials...');
+        s3Client.send(new ListBucketsCommand({}))
+            .then(data => {
+                console.log('S3 test successful, found', data.Buckets?.length || 0, 'buckets');
+                res.json({
+                    success: true,
+                    message: 'Configuration saved and verified successfully'
+                });
+            })
+            .catch(s3Error => {
+                console.error('S3 test failed:', s3Error);
+                // Still save the config but warn the user
+                res.status(200).json({
+                    success: true,
+                    warning: true,
+                    message: 'Configuration saved but S3 connection test failed',
+                    errorDetails: s3Error.message,
+                    requestId: s3Error.$metadata?.requestId
+                });
+            });
     }
     catch (error) {
         console.error('Error saving config:', error);
-        res.status(500).json({ error: 'Failed to save configuration' });
+        res.status(500).json({
+            error: 'Failed to save configuration',
+            message: error.message,
+            stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
+        });
     }
 });
 

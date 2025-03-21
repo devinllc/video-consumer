@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+    <title>Quick Fix for Mixed Content</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Quick Fix for Mixed Content Error</h1>
+
+    <div class="note">
+        <p><strong>Note:</strong> This page includes a special meta tag that allows HTTPS pages to load content from
+            HTTP sources. This is a temporary workaround while you implement a proper HTTPS solution on your backend.
+        </p>
+    </div>
+
+    <h2>Understanding the Problem</h2>
+    <p>Your frontend is hosted on Vercel with HTTPS (secure), but your backend is on EC2 with HTTP (insecure). Modern
+        browsers block "mixed content" for security reasons.</p>
+
+    <h2>How This Fix Works</h2>
+    <p>This page includes the following meta tag:</p>
+    <pre><code>&lt;meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests"&gt;</code></pre>
+
+    <p>This tells the browser to automatically upgrade HTTP requests to HTTPS. This only works if:</p>
+    <ul>
+        <li>Your API server accepts HTTPS requests (even if it doesn't have a proper certificate)</li>
+        <li>Your API endpoints are available via HTTPS</li>
+    </ul>
+
+    <h2>Testing Your Backend Connection</h2>
+    <p>Click the button below to test if the connection to your backend works through this page:</p>
+
+    <button class="button" onclick="testConnection()">Test Backend Connection</button>
+
+    <div id="result" style="margin-top: 20px;"></div>
+
+    <h2>Permanent Solutions</h2>
+    <p>While this fix helps for development, you should implement one of these permanent solutions:</p>
+    <ol>
+        <li>Set up HTTPS on your EC2 instance (see HTTPS-SETUP-GUIDE.md)</li>
+        <li>Use a reverse proxy service like ngrok or Cloudflare Tunnel</li>
+        <li>Set up a custom domain with SSL for your API server</li>
+    </ol>
+
+    <h2>How to Apply This Fix to All Pages</h2>
+    <p>To apply this fix to all your HTML pages on Vercel, you need to add the meta tag to each page's
+        <code>&lt;head&gt;</code> section. Or edit your HTML template if you're using one.</p>
+
+    <script>
+        function testConnection() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = "Testing connection to backend at: http://13.201.186.249:3001/health...";
+
+            fetch('http://13.201.186.249:3001/health')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    resultDiv.innerHTML = `<div style="background-color: #d4edda; padding: 15px; border-radius: 4px;">
+                        <h3 style="color: #155724; margin-top: 0;">Connection Successful! ✅</h3>
+                        <p>Backend response:</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <p>This confirms that the meta tag is working and allowing HTTP content to be loaded.</p>
+                        <p>You can now add this meta tag to your other HTML pages.</p>
+                    </div>`;
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = `<div style="background-color: #f8d7da; padding: 15px; border-radius: 4px;">
+                        <h3 style="color: #721c24; margin-top: 0;">Connection Failed ❌</h3>
+                        <p>Error: ${error.message}</p>
+                        <p>Possible causes:</p>
+                        <ul>
+                            <li>Your EC2 instance is not running</li>
+                            <li>Port 3001 is not open in your security group</li>
+                            <li>Your backend application is not running</li>
+                            <li>There's a network issue between Vercel and your EC2 instance</li>
+                        </ul>
+                        <p>Try the other solutions in the HTTPS-SETUP-GUIDE.md file.</p>
+                    </div>`;
+                });
+        }
+    </script>
+</body>
+
+</html>

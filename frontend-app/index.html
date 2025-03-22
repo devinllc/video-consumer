@@ -6,7 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Remove Content-Security-Policy that's causing SSL errors -->
   <!-- <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests"> -->
-  <title>Video Processing System</title>
+  <title>Video Transcoder</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
   <!-- Fallback configuration in case scripts fail to load -->
   <script>
     // Fallback API configuration in case env.js or config.js fails to load
@@ -425,6 +426,20 @@
         padding: 2rem 1rem;
       }
     }
+
+    .feature-card {
+      transition: transform 0.3s;
+      margin-bottom: 20px;
+    }
+    .feature-card:hover {
+      transform: translateY(-5px);
+    }
+    .hero-section {
+      padding: 5rem 0;
+      background: linear-gradient(135deg, #6c757d 0%, #343a40 100%);
+      color: white;
+      margin-bottom: 2rem;
+    }
   </style>
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
@@ -433,573 +448,106 @@
 </head>
 
 <body>
-  <header>
-    <div class="app-title">
-      <i class="fas fa-film"></i>
-      <span>Video Processing System</span>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="index.html">Video Transcoder</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link active" href="index.html">Home</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="config.html">Configuration</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="upload.html">Upload</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="jobs.html">Jobs</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="player.html">Player</a>
+          </li>
+        </ul>
+      </div>
     </div>
-  </header>
+  </nav>
+
+  <section class="hero-section">
+    <div class="container text-center">
+      <h1 class="display-4">Video Transcoding System</h1>
+      <p class="lead">Convert, optimize, and stream your videos with our powerful cloud-based transcoding solution</p>
+      <div class="mt-4">
+        <a href="upload.html" class="btn btn-primary btn-lg me-2">Upload Video</a>
+        <a href="jobs.html" class="btn btn-light btn-lg">View Jobs</a>
+      </div>
+    </div>
+  </section>
 
   <div class="container">
-    <div class="card" id="upload-section">
-      <div class="card-header">
-        <h2 class="card-title">
-          <i class="fas fa-cloud-upload-alt"></i>
-          Upload Video
-        </h2>
-        <div id="config-status"></div>
-      </div>
-
-      <div class="drop-zone" id="drop-zone">
-        <i class="fas fa-file-video"></i>
-        <p>Drag & drop video file here or click to browse</p>
-        <input type="file" id="file-input" style="display: none" accept="video/*">
-        <button class="button" id="browse-button">
-          <i class="fas fa-folder-open"></i>
-          Browse Files
-        </button>
-      </div>
-
-      <div id="upload-progress" style="display: none;">
-        <div class="progress-container">
-          <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
-        </div>
-        <div id="progress-text">0%</div>
-      </div>
-
-      <div id="upload-status" style="display: none;"></div>
-    </div>
-
-    <div class="card" id="transcoding-section" style="display: none;">
-      <div class="card-header">
-        <h2 class="card-title">
-          <i class="fas fa-cogs"></i>
-          Transcoding
-        </h2>
-      </div>
-
-      <div class="job-details-container" id="job-details">
-        <div class="alert alert-info">
-          <i class="fas fa-info-circle"></i>
-          <span>Preparing to start transcoding...</span>
+    <div class="row mb-5">
+      <div class="col-md-4">
+        <div class="card feature-card h-100">
+          <div class="card-body text-center">
+            <h3 class="card-title">Upload</h3>
+            <p class="card-text">Upload your videos to be processed by our system.</p>
+            <a href="upload.html" class="btn btn-primary">Upload Video</a>
+          </div>
         </div>
       </div>
-
-      <div class="logs-container" id="log-container"></div>
-
-      <div class="job-actions">
-        <button class="button" id="start-transcoding-button">
-          <i class="fas fa-play"></i>
-          Start Transcoding
-        </button>
-        <button class="button outline" id="refresh-logs-button">
-          <i class="fas fa-sync"></i>
-          Refresh Logs
-        </button>
+      <div class="col-md-4">
+        <div class="card feature-card h-100">
+          <div class="card-body text-center">
+            <h3 class="card-title">Manage Jobs</h3>
+            <p class="card-text">View and manage all your transcoding jobs in one place.</p>
+            <a href="jobs.html" class="btn btn-primary">View Jobs</a>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card feature-card h-100">
+          <div class="card-body text-center">
+            <h3 class="card-title">Stream</h3>
+            <p class="card-text">Play your transcoded videos with our built-in player.</p>
+            <a href="player.html" class="btn btn-primary">Video Player</a>
+          </div>
+        </div>
       </div>
     </div>
-
-    <div class="card" id="player-section" style="display: none;">
-      <div class="card-header">
-        <h2 class="card-title">
-          <i class="fas fa-play-circle"></i>
-          Video Player
-        </h2>
+    
+    <div class="row mb-5">
+      <div class="col-12 text-center">
+        <h2>Job Management</h2>
+        <p class="lead">Quickly create a test job to see the system in action</p>
+        <button id="createTestJobBtn" class="btn btn-success">Create Test Job</button>
+        <hr class="my-4">
       </div>
-
-      <video id="video-player" controls></video>
-
-      <div id="resolution-menu" class="resolution-menu">
-        <button class="button" data-resolution="720p">720p</button>
-        <button class="button" data-resolution="480p">480p</button>
-        <button class="button" data-resolution="360p">360p</button>
-      </div>
-    </div>
-
-    <div class="card" id="jobs-section">
-      <div class="card-header">
-        <h2 class="card-title">
-          <i class="fas fa-tasks"></i>
-          Transcoding Jobs
-        </h2>
-        <button class="button outline" id="refresh-jobs-button">
-          <i class="fas fa-sync"></i>
-          Refresh
-        </button>
-      </div>
-
-      <div id="jobs-list" class="jobs-list"></div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <footer class="bg-dark text-white mt-5 py-4">
+    <div class="container text-center">
+      <p>Video Transcoding System &copy; 2023</p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/job-manager.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      // Check if API is configured
-      checkConfiguration();
-
-      // Setup event listeners
-      setupUploadFunctionality();
-      setupJobsRefresh();
-
-      // Load jobs initially
-      refreshJobs();
+    document.addEventListener('DOMContentLoaded', function() {
+      // Setup event listener for creating test job
+      document.getElementById('createTestJobBtn').addEventListener('click', function() {
+        jobManager.createTestJob('COMPLETED')
+          .then(result => {
+            if (result.success) {
+              window.location.href = 'jobs.html';
+            }
+          });
+      });
     });
-
-    // Check if the API is configured
-    function checkConfiguration() {
-      fetch(getApiUrl(API_CONFIG.ENDPOINTS.CHECK_UPLOAD_READY))
-        .then(response => response.json())
-        .then(data => {
-          const configStatus = document.getElementById('config-status');
-          if (data.ready) {
-            configStatus.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> System configured and ready</div>`;
-          } else {
-            configStatus.innerHTML = `<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> ${data.message} <a href="config.html">Configure now</a></div>`;
-          }
-        })
-        .catch(error => {
-          console.error('Error checking configuration:', error);
-          const configStatus = document.getElementById('config-status');
-          configStatus.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error connecting to server. <a href="config.html">Check configuration</a></div>`;
-        });
-    }
-
-    // Setup file upload functionality
-    function setupUploadFunctionality() {
-      const dropZone = document.getElementById('drop-zone');
-      const fileInput = document.getElementById('file-input');
-      const browseButton = document.getElementById('browse-button');
-      const uploadStatus = document.getElementById('upload-status');
-      const progressBar = document.getElementById('progress-bar');
-      const progressText = document.getElementById('progress-text');
-      const uploadProgress = document.getElementById('upload-progress');
-
-      // Browse button click
-      browseButton.addEventListener('click', () => {
-        fileInput.click();
-      });
-
-      // File selection
-      fileInput.addEventListener('change', () => {
-        if (fileInput.files.length > 0) {
-          uploadFile(fileInput.files[0]);
-        }
-      });
-
-      // Drag and drop events
-      dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('drag-over');
-      });
-
-      dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('drag-over');
-      });
-
-      dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('drag-over');
-        if (e.dataTransfer.files.length > 0) {
-          uploadFile(e.dataTransfer.files[0]);
-        }
-      });
-
-      // File upload function
-      function uploadFile(file) {
-        if (!file.type.startsWith('video/')) {
-          uploadStatus.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Only video files are allowed</div>`;
-          uploadStatus.style.display = 'block';
-          return;
-        }
-
-        const formData = new FormData();
-        formData.append('video', file);
-
-        uploadStatus.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Uploading ${file.name}...</div>`;
-        uploadStatus.style.display = 'block';
-        uploadProgress.style.display = 'block';
-
-        fetch(getApiUrl(API_CONFIG.ENDPOINTS.UPLOAD), {
-          method: 'POST',
-          body: formData
-        })
-          .then(response => {
-            if (!response.ok) throw new Error('Upload failed');
-            return response.json();
-          })
-          .then(data => {
-            console.log('Upload successful:', data);
-            uploadStatus.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Upload successful! Video key: ${data.key}</div>`;
-
-            // Show transcoding section
-            document.getElementById('transcoding-section').style.display = 'block';
-            document.getElementById('start-transcoding-button').setAttribute('data-video-key', data.key);
-
-            // Setup transcoding button
-            setupTranscodingFunctionality(data.key);
-          })
-          .catch(error => {
-            console.error('Upload error:', error);
-            uploadStatus.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Upload failed: ${error.message}</div>`;
-          });
-      }
-
-      // Setup upload progress tracking
-      function updateProgress(event) {
-        if (event.lengthComputable) {
-          const percentComplete = Math.round((event.loaded / event.total) * 100);
-          progressBar.style.width = percentComplete + '%';
-          progressText.textContent = percentComplete + '%';
-        }
-      }
-    }
-
-    // Setup transcoding functionality
-    function setupTranscodingFunctionality(videoKey) {
-      const startTranscodingButton = document.getElementById('start-transcoding-button');
-      const refreshLogsButton = document.getElementById('refresh-logs-button');
-      const logContainer = document.getElementById('log-container');
-      const jobDetails = document.getElementById('job-details');
-
-      startTranscodingButton.addEventListener('click', () => {
-        const videoKey = startTranscodingButton.getAttribute('data-video-key');
-        if (!videoKey) {
-          jobDetails.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> No video key found</div>`;
-          return;
-        }
-
-        startTranscoding(videoKey);
-      });
-
-      refreshLogsButton.addEventListener('click', () => {
-        const jobId = refreshLogsButton.getAttribute('data-job-id');
-        if (jobId) {
-          fetchJobDetails(jobId);
-        }
-      });
-
-      // Start transcoding function
-      function startTranscoding(videoKey) {
-        jobDetails.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Starting transcoding job...</div>`;
-
-        fetch(getApiUrl(API_CONFIG.ENDPOINTS.TRANSCODE), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoKey, performanceLevel: 'standard' })
-        })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success) {
-              jobDetails.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Transcoding started! Job ID: ${data.jobId}</div>`;
-              refreshLogsButton.setAttribute('data-job-id', data.jobId);
-
-              // Start polling for job status
-              pollJobStatus(data.jobId);
-            } else {
-              jobDetails.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Failed to start transcoding: ${data.error}</div>`;
-            }
-          })
-          .catch(error => {
-            console.error('Error starting transcoding:', error);
-            jobDetails.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error: ${error.message}</div>`;
-          });
-      }
-
-      // Poll job status
-      function pollJobStatus(jobId) {
-        fetchJobDetails(jobId);
-        const interval = setInterval(() => {
-          fetchJobDetails(jobId).then(job => {
-            if (job.status === 'COMPLETED' || job.status === 'FAILED') {
-              clearInterval(interval);
-
-              if (job.status === 'COMPLETED') {
-                // Show video player
-                const videoKey = job.videoKey;
-                const videoId = videoKey.split('/').pop().split('.')[0];
-                setupVideoPlayer(videoId);
-              }
-            }
-          });
-        }, 5000);
-      }
-
-      // Fetch job details
-      function fetchJobDetails(jobId) {
-        return fetch(getApiUrl(API_CONFIG.ENDPOINTS.JOB + '/' + jobId))
-          .then(response => response.json())
-          .then(job => {
-            // Update job details display
-            updateJobDetailsDisplay(job);
-            return job;
-          })
-          .catch(error => {
-            console.error('Error fetching job details:', error);
-            return null;
-          });
-      }
-
-      // Update job details display
-      function updateJobDetailsDisplay(job) {
-        // Update job status
-        let statusClass = '';
-        let statusIcon = '';
-
-        switch (job.status) {
-          case 'PENDING':
-            statusClass = 'alert-warning';
-            statusIcon = 'clock';
-            break;
-          case 'RUNNING':
-            statusClass = 'alert-info';
-            statusIcon = 'spinner fa-spin';
-            break;
-          case 'COMPLETED':
-            statusClass = 'alert-success';
-            statusIcon = 'check-circle';
-            break;
-          case 'FAILED':
-            statusClass = 'alert-danger';
-            statusIcon = 'times-circle';
-            break;
-        }
-
-        jobDetails.innerHTML = `
-          <div class="alert ${statusClass}">
-            <i class="fas fa-${statusIcon}"></i>
-            <span>Job ${job.jobId} is ${job.status}</span>
-          </div>
-        `;
-
-        // Update logs
-        logContainer.innerHTML = '';
-        if (job.logs && job.logs.length > 0) {
-          job.logs.forEach(log => {
-            const logLine = document.createElement('div');
-            logLine.className = 'log-line';
-
-            const timestamp = document.createElement('span');
-            timestamp.className = 'log-timestamp';
-            timestamp.textContent = new Date(log.timestamp).toLocaleTimeString();
-
-            const message = document.createElement('span');
-            message.className = 'log-message';
-            message.textContent = log.message;
-
-            logLine.appendChild(timestamp);
-            logLine.appendChild(message);
-            logContainer.appendChild(logLine);
-          });
-
-          // Auto-scroll to bottom
-          logContainer.scrollTop = logContainer.scrollHeight;
-        }
-      }
-    }
-
-    // Setup video player
-    function setupVideoPlayer(videoId) {
-      const playerSection = document.getElementById('player-section');
-      const videoPlayer = document.getElementById('video-player');
-      const resolutionMenu = document.getElementById('resolution-menu');
-
-      // Construct the HLS playlist URL
-      const baseUrl = `https://s3.${userConfig?.AWS_REGION || 'ap-south-1'}.amazonaws.com/${userConfig?.S3_BUCKET_NAME || 'platform-videos'}/output/${videoId}`;
-      const masterPlaylist = `${baseUrl}/master.m3u8`;
-
-      // Show player section
-      playerSection.style.display = 'block';
-
-      // Load video
-      videoPlayer.src = masterPlaylist;
-      videoPlayer.load();
-
-      // Setup resolution buttons
-      const resolutionButtons = resolutionMenu.querySelectorAll('button');
-      resolutionButtons.forEach(button => {
-        button.addEventListener('click', () => {
-          const resolution = button.getAttribute('data-resolution');
-          const playlist = `${baseUrl}/${resolution}/index.m3u8`;
-          videoPlayer.src = playlist;
-          videoPlayer.load();
-          videoPlayer.play();
-
-          // Highlight active button
-          resolutionButtons.forEach(btn => btn.classList.remove('active'));
-          button.classList.add('active');
-        });
-      });
-    }
-
-    // Setup jobs refresh
-    function setupJobsRefresh() {
-      const refreshJobsButton = document.getElementById('refresh-jobs-button');
-      refreshJobsButton.addEventListener('click', refreshJobs);
-    }
-
-    // Refresh jobs list
-    function refreshJobs() {
-      const jobsList = document.getElementById('jobs-list');
-      jobsList.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading jobs...</div>';
-
-      fetch(getApiUrl(API_CONFIG.ENDPOINTS.JOBS))
-        .then(response => response.json())
-        .then(jobs => {
-          if (jobs.length === 0) {
-            jobsList.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle"></i> No jobs found</div>';
-          } else {
-            jobsList.innerHTML = '';
-            jobs.forEach(job => {
-              createJobCard(job, jobsList);
-            });
-          }
-        })
-        .catch(error => {
-          console.error('Error fetching jobs:', error);
-          jobsList.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error loading jobs: ${error.message}</div>`;
-        });
-    }
-
-    // Create job card
-    function createJobCard(job, container) {
-      const jobCard = document.createElement('div');
-      jobCard.className = 'job-card';
-
-      // Determine status class
-      let statusClass = '';
-      switch (job.status) {
-        case 'PENDING':
-          statusClass = 'status-pending';
-          break;
-        case 'RUNNING':
-          statusClass = 'status-running';
-          break;
-        case 'COMPLETED':
-          statusClass = 'status-completed';
-          break;
-        case 'FAILED':
-          statusClass = 'status-failed';
-          break;
-      }
-
-      // Format date
-      const startTime = new Date(job.startTime).toLocaleString();
-
-      // Create job card HTML
-      jobCard.innerHTML = `
-        <div class="job-header">
-          <div class="job-title">Job ${job.jobId.substring(0, 8)}...</div>
-          <div class="job-status ${statusClass}">${job.status}</div>
-        </div>
-        <div class="job-details">
-          <div>Video: ${job.videoKey}</div>
-          <div>Started: ${startTime}</div>
-        </div>
-        <div class="job-actions">
-          <button class="action-button view-job-button" data-job-id="${job.jobId}">
-            <i class="fas fa-eye"></i> View Details
-          </button>
-          ${job.status === 'COMPLETED' ?
-          `<button class="action-button play-video-button" data-video-key="${job.videoKey}">
-              <i class="fas fa-play"></i> Play Video
-            </button>` : ''
-        }
-        </div>
-      `;
-
-      // Add event listeners
-      const viewButton = jobCard.querySelector('.view-job-button');
-      viewButton.addEventListener('click', () => {
-        // Show transcoding section and load job details
-        document.getElementById('transcoding-section').style.display = 'block';
-        document.getElementById('refresh-logs-button').setAttribute('data-job-id', job.jobId);
-        fetchJobDetails(job.jobId);
-      });
-
-      // Add play button event listener if job is completed
-      if (job.status === 'COMPLETED') {
-        const playButton = jobCard.querySelector('.play-video-button');
-        playButton.addEventListener('click', () => {
-          const videoKey = playButton.getAttribute('data-video-key');
-          const videoId = videoKey.split('/').pop().split('.')[0];
-          setupVideoPlayer(videoId);
-        });
-      }
-
-      container.appendChild(jobCard);
-    }
-
-    // Fetch job details (reused function)
-    function fetchJobDetails(jobId) {
-      const jobDetails = document.getElementById('job-details');
-      const logContainer = document.getElementById('log-container');
-
-      return fetch(getApiUrl(API_CONFIG.ENDPOINTS.JOB + '/' + jobId))
-        .then(response => response.json())
-        .then(job => {
-          // Update job status display
-          let statusClass = '';
-          let statusIcon = '';
-
-          switch (job.status) {
-            case 'PENDING':
-              statusClass = 'alert-warning';
-              statusIcon = 'clock';
-              break;
-            case 'RUNNING':
-              statusClass = 'alert-info';
-              statusIcon = 'spinner fa-spin';
-              break;
-            case 'COMPLETED':
-              statusClass = 'alert-success';
-              statusIcon = 'check-circle';
-              break;
-            case 'FAILED':
-              statusClass = 'alert-danger';
-              statusIcon = 'times-circle';
-              break;
-          }
-
-          jobDetails.innerHTML = `
-            <div class="alert ${statusClass}">
-              <i class="fas fa-${statusIcon}"></i>
-              <span>Job ${job.jobId} is ${job.status}</span>
-            </div>
-          `;
-
-          // Update logs
-          logContainer.innerHTML = '';
-          if (job.logs && job.logs.length > 0) {
-            job.logs.forEach(log => {
-              const logLine = document.createElement('div');
-              logLine.className = 'log-line';
-
-              const timestamp = document.createElement('span');
-              timestamp.className = 'log-timestamp';
-              timestamp.textContent = new Date(log.timestamp).toLocaleTimeString();
-
-              const message = document.createElement('span');
-              message.className = 'log-message';
-              message.textContent = log.message;
-
-              logLine.appendChild(timestamp);
-              logLine.appendChild(message);
-              logContainer.appendChild(logLine);
-            });
-
-            // Auto-scroll to bottom
-            logContainer.scrollTop = logContainer.scrollHeight;
-          }
-
-          return job;
-        })
-        .catch(error => {
-          console.error('Error fetching job details:', error);
-          jobDetails.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error: ${error.message}</div>`;
-          return null;
-        });
-    }
   </script>
 </body>
 

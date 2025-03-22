@@ -4,243 +4,252 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Processing System - Player</title>
-    <script src="env.js"></script>
-    <script src="config.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Video Player</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body {
-            padding: 20px;
-            background-color: #f8f9fa;
-        }
-
-        .player-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 30px;
+        #video-player {
+            max-width: 100%;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
-        video {
-            width: 100%;
-            border-radius: 4px;
+        .resolution-selector {
+            margin: 20px 0;
         }
 
-        .main-nav {
-            max-width: 800px;
-            margin: 0 auto 20px auto;
-            background-color: white;
-            padding: 10px 20px;
+        .video-container {
+            background-color: #000;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .main-nav ul {
-            list-style: none;
-            padding: 0;
-            display: flex;
-            gap: 20px;
-            margin-bottom: 0;
-        }
-
-        .main-nav a {
-            text-decoration: none;
-            color: #0d6efd;
-            font-weight: 500;
-        }
-
-        .main-nav a.active {
-            font-weight: bold;
-        }
-
-        .alert {
-            margin-top: 20px;
+            overflow: hidden;
+            margin-bottom: 20px;
         }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <h1 class="text-center mb-4">Video Transcoding Service</h1>
-
-        <nav class="main-nav">
-            <ul>
-                <li><a href="index.html">Home</a></li>
-                <li><a href="config.html">Configuration</a></li>
-                <li><a href="jobs.html">Jobs</a></li>
-                <li><a href="player.html" class="active">Player</a></li>
-                <li><a href="instructions.html">Instructions</a></li>
-            </ul>
-        </nav>
-
-        <div class="player-container">
-            <h2 class="mb-4">Video Player</h2>
-
-            <div class="form-group mb-4">
-                <label for="playlistUrl" class="form-label">HLS Playlist URL:</label>
-                <input type="text" class="form-control" id="playlistUrl"
-                    placeholder="Enter the HLS playlist URL or select a job">
-            </div>
-
-            <button class="btn btn-primary mb-4" onclick="loadVideo()">Load Video</button>
-
-            <div class="form-group mb-4">
-                <label for="jobSelect" class="form-label">Or select from completed jobs:</label>
-                <select class="form-select" id="jobSelect">
-                    <option value="">Select a job</option>
-                </select>
-            </div>
-
-            <div id="videoContainer" class="mb-4" style="display: none;">
-                <video id="videoPlayer" controls></video>
-            </div>
-
-            <div id="status" class="alert alert-info">Please enter a playlist URL or select a job to play video.</div>
-            
-            <div class="alert alert-warning mt-4">
-                <h5>Important Note About Transcoding</h5>
-                <p>When deployed on Vercel or similar serverless platforms, actual video transcoding cannot be performed due to serverless environment limitations:</p>
-                <ul>
-                    <li>Serverless functions have limited execution time (typically 10-60 seconds)</li>
-                    <li>Serverless environments don't support long-running processes</li>
-                    <li>Memory and CPU resources are limited</li>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="index.html">Video Transcoder</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="config.html">Configuration</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="upload.html">Upload</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="jobs.html">Jobs</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="player.html">Player</a>
+                    </li>
                 </ul>
-                <p><strong>To fully use video transcoding features:</strong></p>
-                <ul>
-                    <li>Deploy this application on a traditional server (AWS EC2, DigitalOcean, etc.)</li>
-                    <li>Use AWS Lambda with extended timeout for moderate transcoding tasks</li>
-                    <li>Use AWS Batch or AWS ECS directly for heavy transcoding workloads</li>
-                </ul>
-                <p>The current deployment simulates job creation but doesn't actually process videos.</p>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col">
+                <h1>Video Player</h1>
+                <p class="lead">View your transcoded videos</p>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Video Player</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="video-container">
+                            <video id="video-player" controls></video>
+                        </div>
+                        <div class="resolution-selector">
+                            <label class="form-label">Resolution:</label>
+                            <div class="btn-group" role="group" id="resolution-buttons">
+                                <button type="button" class="btn btn-outline-primary"
+                                    data-resolution="720p">720p</button>
+                                <button type="button" class="btn btn-outline-primary"
+                                    data-resolution="480p">480p</button>
+                                <button type="button" class="btn btn-outline-primary"
+                                    data-resolution="360p">360p</button>
+                            </div>
+                        </div>
+                        <div class="alert alert-info" id="player-message">
+                            Select a video from the list of completed jobs to play.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Completed Videos</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="completed-jobs-list">
+                            <p class="text-center">Loading completed jobs...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
+    <footer class="bg-dark text-white mt-5 py-4">
+        <div class="container text-center">
+            <p>Video Transcoding System &copy; 2023</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/job-manager.js"></script>
     <script>
-        // Initialize player and load jobs when the document is ready
         document.addEventListener('DOMContentLoaded', function () {
-            loadJobs();
+            const videoPlayer = document.getElementById('video-player');
+            const resolutionButtons = document.getElementById('resolution-buttons').querySelectorAll('button');
+            const playerMessage = document.getElementById('player-message');
+            const completedJobsList = document.getElementById('completed-jobs-list');
+
+            let currentVideoId = null;
+            let currentVideoData = null;
+
+            // Load completed jobs
+            loadCompletedJobs();
+
+            // Function to load completed jobs
+            function loadCompletedJobs() {
+                jobManager.fetchJobs()
+                    .then(jobs => {
+                        const completedJobs = jobs.filter(job => job.status === 'COMPLETED');
+
+                        if (completedJobs.length === 0) {
+                            completedJobsList.innerHTML = '<p class="text-center">No completed jobs found.</p>';
+                            return;
+                        }
+
+                        // Display completed jobs
+                        completedJobsList.innerHTML = '';
+                        completedJobs.forEach(job => {
+                            const videoName = job.videoKey.split('/').pop() || job.videoKey;
+                            const jobItem = document.createElement('div');
+                            jobItem.className = 'card mb-2';
+                            jobItem.innerHTML = `
+                                <div class="card-body">
+                                    <h6 class="card-title">${videoName}</h6>
+                                    <p class="card-text small text-muted">ID: ${job.jobId}</p>
+                                    <button class="btn btn-sm btn-primary play-video" data-job-id="${job.jobId}">
+                                        Play Video
+                                    </button>
+                                </div>
+                            `;
+                            completedJobsList.appendChild(jobItem);
+
+                            // Add event listener to play button
+                            jobItem.querySelector('.play-video').addEventListener('click', () => {
+                                loadVideoPlayer(job.jobId);
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error loading completed jobs:', error);
+                        completedJobsList.innerHTML = '<p class="text-center text-danger">Error loading jobs.</p>';
+                    });
+            }
+
+            // Function to load video player with job ID
+            function loadVideoPlayer(jobId) {
+                playerMessage.innerHTML = 'Loading video data...';
+                playerMessage.classList.remove('d-none');
+
+                // Fetch job details to get streaming info
+                fetch(`/api/jobs/${jobId}`)
+                    .then(response => response.json())
+                    .then(jobData => {
+                        if (!jobData.streaming) {
+                            playerMessage.innerHTML = 'This job does not have streaming information yet.';
+                            return;
+                        }
+
+                        currentVideoData = jobData.streaming;
+                        currentVideoId = jobData.streaming.videoId;
+
+                        // Load the master playlist
+                        loadVideo(jobData.streaming.masterPlaylist);
+
+                        // Update resolution buttons
+                        updateResolutionButtons(jobData.streaming.resolutions);
+
+                        // Hide the message
+                        playerMessage.classList.add('d-none');
+                    })
+                    .catch(error => {
+                        console.error('Error loading job details:', error);
+                        playerMessage.innerHTML = 'Error loading video data.';
+                        playerMessage.classList.remove('d-none');
+                    });
+            }
+
+            // Function to load video with URL
+            function loadVideo(url) {
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(url);
+                    hls.attachMedia(videoPlayer);
+                    hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                        videoPlayer.play();
+                    });
+                } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Native HLS support (Safari)
+                    videoPlayer.src = url;
+                    videoPlayer.addEventListener('loadedmetadata', function () {
+                        videoPlayer.play();
+                    });
+                } else {
+                    playerMessage.innerHTML = 'Your browser does not support HLS playback.';
+                    playerMessage.classList.remove('d-none');
+                }
+            }
+
+            // Function to update resolution buttons
+            function updateResolutionButtons(resolutions) {
+                if (!resolutions) return;
+
+                // Enable all resolution buttons that are available
+                resolutionButtons.forEach(button => {
+                    const resolution = button.getAttribute('data-resolution');
+                    if (resolutions[resolution]) {
+                        button.disabled = false;
+                        button.addEventListener('click', () => {
+                            loadVideo(resolutions[resolution]);
+
+                            // Update active button
+                            resolutionButtons.forEach(btn => btn.classList.remove('active'));
+                            button.classList.add('active');
+                        });
+                    } else {
+                        button.disabled = true;
+                    }
+                });
+            }
+
+            // Add refresh button functionality
+            document.querySelectorAll('.btn-refresh').forEach(button => {
+                button.addEventListener('click', loadCompletedJobs);
+            });
         });
-
-        // Get jobs list
-        async function loadJobs() {
-            try {
-                const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.JOBS));
-                const data = await response.json();
-                const jobs = data.jobs || [];
-
-                const jobSelect = document.getElementById('jobSelect');
-                // Keep only the first option (the placeholder)
-                jobSelect.innerHTML = '<option value="">Select a job</option>';
-
-                // Add jobs to the select element
-                jobs.forEach(job => {
-                    const option = document.createElement('option');
-                    option.value = job.videoKey;
-                    const videoName = job.videoKey.split('/').pop();
-                    option.textContent = `${videoName} (${job.status})`;
-                    option.disabled = job.status !== 'COMPLETED';
-                    jobSelect.appendChild(option);
-                });
-
-                jobSelect.addEventListener('change', function () {
-                    if (this.value) {
-                        // Generate the playlist URL from the video key
-                        const videoKey = this.value;
-                        const videoName = videoKey.split('/').pop();
-                        const videoBaseName = videoName.substring(0, videoName.lastIndexOf('.'));
-                        
-                        // Get the S3 bucket and region from the configuration
-                        fetch(getApiUrl(API_CONFIG.ENDPOINTS.CONFIG))
-                            .then(res => res.json())
-                            .then(data => {
-                                if (data.configured && data.config) {
-                                    const region = data.config.AWS_REGION;
-                                    const bucket = data.config.S3_BUCKET_NAME;
-                                    
-                                    // Set the playlist URL
-                                    const playlistUrl = `https://s3.${region}.amazonaws.com/${bucket}/output/${videoBaseName}/master.m3u8`;
-                                    document.getElementById('playlistUrl').value = playlistUrl;
-                                    
-                                    // Show production mode warning if needed
-                                    const statusElement = document.getElementById('status');
-                                    if (window.location.hostname.includes('vercel.app')) {
-                                        statusElement.className = 'alert alert-warning';
-                                        statusElement.innerHTML = `
-                                            <strong>Note:</strong> In production mode, actual transcoding is not performed.
-                                            The URL has been generated but the video may not exist unless you've manually uploaded it.
-                                        `;
-                                    }
-                                }
-                            })
-                            .catch(err => console.error('Error fetching config:', err));
-                    }
-                });
-            } catch (error) {
-                console.error('Error loading jobs:', error);
-            }
-        }
-
-        // Load video from URL
-        function loadVideo() {
-            const playlistUrl = document.getElementById('playlistUrl').value;
-            const videoContainer = document.getElementById('videoContainer');
-            const videoPlayer = document.getElementById('videoPlayer');
-            const statusElement = document.getElementById('status');
-
-            if (!playlistUrl) {
-                statusElement.className = 'alert alert-danger';
-                statusElement.textContent = 'Please enter a valid playlist URL';
-                return;
-            }
-
-            // Reset the player
-            videoPlayer.src = '';
-            videoContainer.style.display = 'none';
-            statusElement.className = 'alert alert-info';
-            statusElement.textContent = 'Loading video...';
-
-            // Check if HLS.js is supported
-            if (Hls.isSupported()) {
-                const hls = new Hls();
-                hls.loadSource(playlistUrl);
-                hls.attachMedia(videoPlayer);
-                hls.on(Hls.Events.MANIFEST_PARSED, function () {
-                    videoContainer.style.display = 'block';
-                    videoPlayer.play();
-                    statusElement.className = 'alert alert-success';
-                    statusElement.textContent = 'Video loaded successfully';
-                });
-
-                hls.on(Hls.Events.ERROR, function (event, data) {
-                    console.error('HLS error:', data);
-                    if (data.fatal) {
-                        statusElement.className = 'alert alert-danger';
-                        statusElement.textContent = `Error loading video: ${data.type} - ${data.details}`;
-                    }
-                });
-            } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
-                // For Safari
-                videoPlayer.src = playlistUrl;
-                videoContainer.style.display = 'block';
-                videoPlayer.addEventListener('loadedmetadata', function () {
-                    videoPlayer.play();
-                    statusElement.className = 'alert alert-success';
-                    statusElement.textContent = 'Video loaded successfully';
-                });
-                videoPlayer.addEventListener('error', function () {
-                    statusElement.className = 'alert alert-danger';
-                    statusElement.textContent = 'Error loading video: The video file might not exist or is not accessible';
-                });
-            } else {
-                statusElement.className = 'alert alert-danger';
-                statusElement.textContent = 'Your browser does not support HLS playback';
-            }
-        }
     </script>
 </body>
 
-</html> 
+</html>

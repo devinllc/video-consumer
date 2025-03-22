@@ -12,7 +12,7 @@ class JobManager {
         if (this.pollInterval) {
             clearInterval(this.pollInterval);
         }
-        
+
         this.retryCount = 0;
         this.pollInterval = setInterval(() => this.fetchJobs(), 2000);
         this.fetchJobs(); // Fetch immediately on start
@@ -33,18 +33,35 @@ class JobManager {
             const ports = [3001, 3002, 3003]; // Try all possible ports
             let jobsData = [];
             let fetchSucceeded = false;
-            
+
             for (const port of ports) {
                 if (fetchSucceeded) continue;
-                
+
                 try {
+                    // First try to import jobs from AWS
+                    console.log(`Attempting to import jobs from AWS via port ${port}...`);
+                    try {
+                        const importResponse = await fetch(`http://localhost:${port}/api/import-jobs`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+
+                        if (importResponse.ok) {
+                            const importResult = await importResponse.json();
+                            console.log('Import result:', importResult);
+                        }
+                    } catch (importErr) {
+                        console.log(`Failed to import jobs from port ${port}:`, importErr);
+                    }
+
+                    // Now get the jobs list
                     const response = await fetch(`http://localhost:${port}/api/jobs`, {
                         method: 'GET',
                         headers: { 'Content-Type': 'application/json' }
                     });
-                    
+
                     if (!response.ok) continue;
-                    
+
                     jobsData = await response.json();
                     fetchSucceeded = true;
                     console.log(`Successfully fetched jobs from port ${port}:`, jobsData);
@@ -53,29 +70,29 @@ class JobManager {
                     console.log(`Failed to fetch jobs from port ${port}:`, err);
                 }
             }
-            
+
             if (!fetchSucceeded) {
                 this.retryCount++;
                 console.log(`Failed to fetch jobs from any port. Retry ${this.retryCount}/${this.maxRetries}`);
-                
+
                 if (this.retryCount >= this.maxRetries) {
                     this.stopPolling();
                     this.showError("Server connection lost. Please refresh the page.");
                 }
                 return;
             }
-            
+
             // Reset retry count on success
             this.retryCount = 0;
-            
+
             // Update job list
             this.updateJobList(jobsData);
-            
+
             // Also fetch individual job details for any active jobs
             for (const job of jobsData) {
                 this.fetchJobDetails(job.jobId);
             }
-            
+
             if (jobsData.length === 0) {
                 document.getElementById('jobs-list').innerHTML = '<tr><td colspan="4" class="text-center">No active jobs found</td></tr>';
             }
@@ -92,14 +109,14 @@ class JobManager {
             document.getElementById('jobs-list').innerHTML = '<tr><td colspan="4" class="text-center">No active jobs found</td></tr>';
             return;
         }
-        
+
         // Build job list HTML
         let jobsHtml = '';
-        
+
         jobsData.forEach(job => {
             const jobId = job.jobId;
             const status = job.status;
-            
+
             // Track this job if it's new
             if (!this.activeJobs.has(jobId)) {
                 this.activeJobs.set(jobId, {
@@ -107,10 +124,10 @@ class JobManager {
                     lastUpdated: new Date()
                 });
             }
-            
+
             const videoName = job.videoKey ? job.videoKey.split('/').pop() : 'Unknown';
             const startTime = new Date(job.startTime).toLocaleString();
-            
+
             let statusClass = '';
             switch (status) {
                 case 'RUNNING':
@@ -125,7 +142,7 @@ class JobManager {
                 default:
                     statusClass = 'badge bg-secondary';
             }
-            
+
             jobsHtml += `
             <tr data-job-id="${jobId}">
                 <td>${jobId.substring(0, 8)}...</td>
@@ -137,9 +154,9 @@ class JobManager {
             </tr>
             `;
         });
-        
+
         document.getElementById('jobs-list').innerHTML = jobsHtml;
-        
+
         // Add event listeners to view buttons
         document.querySelectorAll('.view-job').forEach(button => {
             button.addEventListener('click', (e) => {
@@ -157,13 +174,13 @@ class JobManager {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' }
             });
-            
+
             if (!response.ok) {
                 throw new Error(`Failed to fetch job details: ${response.status}`);
             }
-            
+
             const jobDetails = await response.json();
-            
+
             // Store job details in the active jobs map
             const existingJob = this.activeJobs.get(jobId) || {};
             this.activeJobs.set(jobId, {
@@ -171,13 +188,13 @@ class JobManager {
                 ...jobDetails,
                 lastUpdated: new Date()
             });
-            
+
             // If there's an open modal for this job, update it
             const modal = document.getElementById('jobDetailsModal');
             if (modal && modal.getAttribute('data-job-id') === jobId) {
                 this.updateJobDetailsModal(jobId);
             }
-            
+
             return jobDetails;
         } catch (error) {
             console.error(`Error fetching job details for ${jobId}:`, error);
@@ -196,7 +213,7 @@ class JobManager {
             modal.setAttribute('tabindex', '-1');
             modal.setAttribute('aria-labelledby', 'jobDetailsModalLabel');
             modal.setAttribute('aria-hidden', 'true');
-            
+
             modal.innerHTML = `
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
@@ -233,9 +250,9 @@ class JobManager {
                 </div>
             </div>
             `;
-            
+
             document.body.appendChild(modal);
-            
+
             // Add event listener for refresh button
             document.getElementById('refresh-logs-btn').addEventListener('click', () => {
                 const currentJobId = modal.getAttribute('data-job-id');
@@ -244,18 +261,18 @@ class JobManager {
                 }
             });
         }
-        
+
         // Set the current job ID
         modal.setAttribute('data-job-id', jobId);
-        
+
         // Fetch job details if we don't have them
         if (!this.activeJobs.has(jobId) || !this.activeJobs.get(jobId).logs) {
             await this.fetchJobDetails(jobId);
         }
-        
+
         // Update modal content
         this.updateJobDetailsModal(jobId);
-        
+
         // Show the modal
         const modalInstance = new bootstrap.Modal(modal);
         modalInstance.show();
@@ -265,9 +282,9 @@ class JobManager {
     updateJobDetailsModal(jobId) {
         const job = this.activeJobs.get(jobId);
         if (!job) return;
-        
+
         document.getElementById('job-id').textContent = jobId;
-        
+
         // Set status with appropriate styling
         const statusEl = document.getElementById('job-status');
         let statusClass = '';
@@ -285,18 +302,18 @@ class JobManager {
                 statusClass = 'badge bg-secondary';
         }
         statusEl.innerHTML = `<span class="${statusClass}">${job.status}</span>`;
-        
+
         // Set video info
         document.getElementById('job-video').textContent = job.videoKey || 'Unknown';
-        
+
         // Set start time
-        document.getElementById('job-start-time').textContent = 
+        document.getElementById('job-start-time').textContent =
             job.startTime ? new Date(job.startTime).toLocaleString() : 'Unknown';
-        
+
         // Display streaming info if available
         const streamingContainer = document.getElementById('streaming-info-container');
         const streamingInfo = document.getElementById('streaming-info');
-        
+
         if (job.streaming) {
             streamingContainer.classList.remove('d-none');
             let html = `
@@ -307,11 +324,11 @@ class JobManager {
                     <p><strong>Resolutions:</strong></p>
                     <ul>
             `;
-            
+
             for (const [resolution, url] of Object.entries(job.streaming.resolutions)) {
                 html += `<li>${resolution}: <a href="${url}" target="_blank">${url}</a></li>`;
             }
-            
+
             html += `
                     </ul>
                     <p class="mt-3">
@@ -322,31 +339,31 @@ class JobManager {
                 </div>
             </div>
             `;
-            
+
             streamingInfo.innerHTML = html;
         } else {
             streamingContainer.classList.add('d-none');
         }
-        
+
         // Display logs
         const logsEl = document.getElementById('job-logs');
         let logsHtml = '';
-        
+
         if (job.logs && job.logs.length > 0) {
             job.logs.forEach(log => {
                 let timestamp = log.timestamp;
                 try {
                     timestamp = new Date(log.timestamp).toLocaleTimeString();
-                } catch (e) {}
-                
+                } catch (e) { }
+
                 logsHtml += `<div>[${timestamp}] ${log.message}</div>`;
             });
         } else {
             logsHtml = '<div class="text-warning">No logs available yet.</div>';
         }
-        
+
         logsEl.innerHTML = logsHtml;
-        
+
         // Auto-scroll to bottom of logs
         logsEl.scrollTop = logsEl.scrollHeight;
     }
@@ -360,7 +377,7 @@ class JobManager {
             ${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
-        
+
         const container = document.querySelector('.container');
         container.insertBefore(alertEl, container.firstChild);
     }
@@ -374,22 +391,22 @@ class JobManager {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videoKey, performanceLevel })
             });
-            
+
             if (!response.ok) {
                 throw new Error(`Failed to start transcoding: ${response.status}`);
             }
-            
+
             const result = await response.json();
             console.log('Transcoding started:', result);
-            
+
             // Start polling for job updates
             this.startPolling();
-            
+
             // Show job details right away
             setTimeout(() => {
                 this.showJobDetailsModal(result.jobId);
             }, 1000);
-            
+
             return result;
         } catch (error) {
             console.error('Error starting transcoding:', error);

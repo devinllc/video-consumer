@@ -1,0 +1,182 @@
+/* Player-specific styling */
+
+/* Video player container */
+.video-container {
+    position: relative;
+    width: 100%;
+    background-color: #000;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+    aspect-ratio: 16 / 9;
+}
+
+.video-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background-color: #000;
+}
+
+/* Controls overlay */
+.player-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+    padding: 15px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.video-container:hover .player-controls,
+.video-container:focus-within .player-controls {
+    opacity: 1;
+}
+
+/* Resolution buttons */
+.resolution-selector {
+    margin: 15px 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.resolution-selector .btn-group {
+    flex-wrap: wrap;
+}
+
+.resolution-selector .btn {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    transition: all 0.2s ease;
+}
+
+.resolution-selector .btn.active {
+    transform: scale(1.05);
+    box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
+}
+
+/* URL input section */
+.url-input-section {
+    margin-bottom: 20px;
+}
+
+.url-input-section .input-group {
+    margin-bottom: 0;
+}
+
+.url-input-section .form-control {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    font-size: 0.9rem;
+}
+
+.url-input-section .btn {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+/* Job cards in the sidebar */
+#completed-jobs-list .card {
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+    border: none;
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+#completed-jobs-list .card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+#completed-jobs-list .card-body {
+    padding: 12px;
+}
+
+#completed-jobs-list .card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#completed-jobs-list .card-text {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-bottom: 10px;
+}
+
+#completed-jobs-list .btn {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Error messages */
+.alert-danger {
+    border-left: 4px solid #dc3545;
+}
+
+.alert-info {
+    border-left: 4px solid #17a2b8;
+}
+
+/* Loading spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(0, 123, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #007bff;
+    animation: spin 1s ease-in-out infinite;
+    margin-right: 0.5rem;
+}
+
+/* Media queries for responsive design */
+@media (max-width: 768px) {
+    .video-container {
+        aspect-ratio: 4 / 3;
+    }
+
+    .resolution-selector {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .resolution-selector .form-label {
+        margin-bottom: 8px;
+    }
+
+    #completed-jobs-list .card-body {
+        padding: 10px;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .video-container {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    #completed-jobs-list .card {
+        background-color: #2d3238;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    #completed-jobs-list .card-title {
+        color: #e9ecef;
+    }
+
+    #completed-jobs-list .card-text {
+        color: #adb5bd;
+    }
+}

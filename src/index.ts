@@ -17,7 +17,7 @@ const app = express();
 
 // Enable CORS for all routes
 app.use(cors({
-    origin: process.env.FRONTEND_URL || '*',
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -25,7 +25,8 @@ app.use(cors({
 // Parse JSON bodies
 app.use(express.json());
 
-app.use(express.static('frontend-app'));
+// Serve static files from the frontend directory
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response): void => {
@@ -1026,26 +1027,24 @@ app.get('/api/jobs/:jobId', async (req: Request, res: Response) => {
 });
 
 // API endpoint to get all jobs
-app.get('/api/jobs', (req: Request, res: Response) => {
-    // Convert the Map to an array and transform to the needed format
-    const jobs = Array.from(activeJobs).map(([jobId, job]) => {
-        // Format job for API response
-        return {
+app.get('/api/jobs', async (req: Request, res: Response) => {
+    try {
+        // Check if we have any jobs in memory
+        const jobs = Array.from(activeJobs.entries()).map(([jobId, job]) => ({
             jobId,
             status: job.status,
             startTime: job.startTime,
-            videoKey: job.videoKey,
-            performanceLevel: job.performanceLevel || 'standard',
-            streaming: job.streaming,
-            // Include a count of logs but not the logs themselves to reduce payload
-            logCount: job.logs ? job.logs.length : 0
-        };
-    });
+            videoKey: job.videoKey
+        }));
 
-    // Log the result for debugging
-    console.log(`Returning ${jobs.length} jobs from API`);
+        console.log(`Returning ${jobs.length} jobs`);
 
-    res.json(jobs);
+        // Return the jobs as JSON
+        res.json(jobs);
+    } catch (error: any) {
+        console.error('Error getting jobs:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // API endpoint to test connection
@@ -1708,5 +1707,88 @@ app.get('/api/check-upload-ready', (_req: Request, res: Response) => {
     } catch (error) {
         console.error('Error checking upload readiness:', error);
         res.status(500).json({ ready: false, error: 'Internal server error' });
+    }
+});
+
+// API endpoint to create a test job (for development/testing only)
+app.post('/api/create-test-job', (req: Request, res: Response) => {
+    try {
+        // Generate a unique job ID
+        const jobId = uuidv4();
+        const videoKey = req.body.videoKey || 'test-video.mp4';
+        const status = req.body.status || 'COMPLETED';
+
+        console.log(`Creating test job ${jobId} with status ${status}`);
+
+        // Add to active jobs
+        activeJobs.set(jobId, {
+            status: status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+            startTime: new Date(),
+            videoKey,
+            logs: [{
+                timestamp: new Date().toISOString(),
+                message: 'Test job created'
+            }],
+            performanceLevel: 'standard'
+        });
+
+        // If it's a completed job, add sample logs and streaming info
+        if (status === 'COMPLETED') {
+            // Add streaming info
+            const videoId = videoKey.split('/').pop()?.split('.')[0] || 'test-video';
+            const baseUrl = 'https://example.com/output/' + videoId;
+
+            updateJob(jobId, {
+                streaming: {
+                    videoId,
+                    masterPlaylist: `${baseUrl}/master.m3u8`,
+                    resolutions: {
+                        "720p": `${baseUrl}/720p/index.m3u8`,
+                        "480p": `${baseUrl}/480p/index.m3u8`,
+                        "360p": `${baseUrl}/360p/index.m3u8`
+                    }
+                }
+            });
+
+            // Add sample logs
+            addSampleTranscodingLogs(jobId);
+        }
+
+        // Persist the job
+        saveJobsToStorage();
+
+        res.json({
+            success: true,
+            jobId,
+            message: 'Test job created successfully'
+        });
+    } catch (error: any) {
+        console.error('Error creating test job:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// API endpoint to get job details by ID
+app.get('/api/jobs/:jobId', (req: Request, res: Response) => {
+    try {
+        const jobId = req.params.jobId;
+        console.log(`Getting job details for ${jobId}`);
+
+        // Check if job exists in activeJobs
+        if (activeJobs.has(jobId)) {
+            const job = activeJobs.get(jobId);
+            res.json({
+                jobId,
+                ...job
+            });
+        } else {
+            res.status(404).json({ error: `Job ${jobId} not found` });
+        }
+    } catch (error: any) {
+        console.error('Error getting job details:', error);
+        res.status(500).json({ error: error.message });
     }
 });

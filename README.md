@@ -251,3 +251,34 @@ curl http://YOUR_EC2_IP:3001/api/config
 ```
 
 If these commands return responses but your frontend can't connect, it may be a CORS or configuration issue. 
+
+## UPDATING THE AWS CONFIGURATION
+
+If you're having trouble saving your AWS configuration through the web interface (`http://13.235.75.73:3001/config.html`), follow these steps:
+
+1. Make sure you have all the required fields filled in:
+   - AWS Region (e.g., `ap-south-1`)
+   - AWS Access Key ID
+   - AWS Secret Access Key
+   - S3 Bucket Name
+   - ECS Cluster ARN
+   - ECS Task Definition
+   - ECS Subnet IDs (comma-separated)
+   - ECS Security Group IDs (comma-separated)
+
+2. If you see an error about "Missing required configuration fields", ensure that:
+   - All fields in both AWS and ECS tabs are completed (click on the "ECS Configuration" tab)
+   - There are no extra spaces at the beginning or end of your entries
+   - The format matches the examples shown under each field
+
+3. Pull the latest code fixes to your EC2 instance:
+   ```bash
+   ssh -i your-key.pem ec2-user@13.235.75.73
+   cd ~/video-consumer
+   git fetch origin
+   git reset --hard origin/main
+   npm run build
+   pm2 restart video-backend
+   ```
+
+4. After restarting, clear your browser cache (Ctrl+F5) and try again 

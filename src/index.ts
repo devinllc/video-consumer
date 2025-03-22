@@ -410,92 +410,6 @@ async function monitorDockerContainer(jobId: string, containerId: string) {
     }
 }
 
-// Function to start transcoding
-async function startTranscoding(jobId: string, videoKey: string): Promise<void> {
-    if (!userConfig) {
-        throw new Error('Configuration missing');
-    }
-
-    console.log('Starting transcoding:', {
-        jobId,
-        videoKey,
-        bucket: userConfig.S3_BUCKET_NAME
-    });
-
-    // Initialize ECS client
-    const ecsClient = new ECSClient({
-        region: userConfig.AWS_REGION,
-        credentials: {
-            accessKeyId: userConfig.AWS_ACCESS_KEY_ID,
-            secretAccessKey: userConfig.AWS_SECRET_ACCESS_KEY,
-        }
-    });
-
-    try {
-        // Extract account ID from the cluster ARN
-        const clusterArnParts = userConfig.ECS_CLUSTER.split(':');
-        const userAccountId = clusterArnParts[4]; // Account ID is the 5th part of the ARN
-
-        console.log(`Using user account ID: ${userAccountId}`);
-
-        // Start ECS task
-        const command = new RunTaskCommand({
-            cluster: userConfig.ECS_CLUSTER,
-            taskDefinition: userConfig.ECS_TASK_DEFINITION,
-            launchType: 'FARGATE',
-            networkConfiguration: {
-                awsvpcConfiguration: {
-                    subnets: userConfig.ECS_SUBNETS.split(','),
-                    securityGroups: userConfig.ECS_SECURITY_GROUPS.split(','),
-                    assignPublicIp: 'ENABLED'
-                }
-            },
-            overrides: {
-                containerOverrides: [{
-                    name: 'video-transcoder',
-                    environment: [
-                        { name: 'AWS_ACCESS_KEY_ID', value: userConfig.AWS_ACCESS_KEY_ID },
-                        { name: 'AWS_SECRET_ACCESS_KEY', value: userConfig.AWS_SECRET_ACCESS_KEY },
-                        { name: 'AWS_REGION', value: userConfig.AWS_REGION },
-                        { name: 'BUCKET_NAME', value: userConfig.S3_BUCKET_NAME },
-                        { name: 'KEY', value: videoKey }
-                    ]
-                }]
-            }
-        });
-
-        const response = await ecsClient.send(command);
-        console.log('Started ECS task:', response);
-
-        const job = activeJobs.get(jobId);
-        if (job && response.tasks?.[0]) {
-            job.taskArn = response.tasks[0].taskArn;
-            job.logs = [{
-                timestamp: new Date().toISOString(),
-                message: `Started ECS task: ${response.tasks[0].taskArn}`
-            }];
-        }
-
-        // Start monitoring the task
-        monitorECSTask(jobId, response.tasks?.[0]?.taskArn || '');
-    } catch (error: any) {
-        console.error('ECS error:', error);
-
-        // Handle specific error types
-        if (error.__type === 'BlockedException') {
-            throw new Error('AWS account is blocked. Please contact AWS support to resolve this issue.');
-        } else if (error.__type === 'InvalidParameterException' && error.message.includes('AccountIDs mismatch')) {
-            throw new Error('Account ID mismatch. Please make sure your task definition uses the same AWS account ID as your AWS credentials.');
-        } else if (error.__type === 'InvalidParameterException' && error.message.includes('subnet')) {
-            throw new Error('Invalid subnet configuration. Please check your subnet IDs.');
-        } else if (error.__type === 'InvalidParameterException' && error.message.includes('security group')) {
-            throw new Error('Invalid security group configuration. Please check your security group IDs.');
-        }
-
-        throw new Error(`Failed to start ECS task: ${error.message}`);
-    }
-}
-
 // Function to monitor ECS task
 async function monitorECSTask(jobId: string, taskArn: string) {
     const job = activeJobs.get(jobId);
@@ -739,6 +653,11 @@ app.post('/api/start-transcoding', async (req: Request, res: Response) => {
             return;
         }
 
+        // Make sure the userConfig is loaded
+        if (!userConfig) {
+            throw new Error('AWS configuration not loaded. Please configure your AWS settings first.');
+        }
+
         // Generate a unique job ID
         const jobId = uuidv4();
         console.log(`Starting transcoding job ${jobId} for video: ${videoKey}, performance level: ${performanceLevel || 'standard'}`);
@@ -756,35 +675,79 @@ app.post('/api/start-transcoding', async (req: Request, res: Response) => {
             notifiedRunning: false
         });
 
-        // Start the actual ECS task
+        // Start the real ECS task directly
         try {
-            // Make sure the userConfig is loaded
-            if (!userConfig) {
-                throw new Error('AWS configuration not loaded. Please configure your AWS settings first.');
+            console.log('Starting ECS task with these parameters:');
+            console.log(`Cluster: ${userConfig.ECS_CLUSTER}`);
+            console.log(`Task Definition: ${userConfig.ECS_TASK_DEFINITION}`);
+            console.log(`Subnets: ${userConfig.ECS_SUBNETS}`);
+            console.log(`Security Groups: ${userConfig.ECS_SECURITY_GROUPS}`);
+
+            // Create ECS client
+            const ecsClient = new ECSClient({
+                region: userConfig.AWS_REGION,
+                credentials: {
+                    accessKeyId: userConfig.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: userConfig.AWS_SECRET_ACCESS_KEY,
+                }
+            });
+
+            // First, verify the task definition exists
+            try {
+                console.log(`Verifying task definition: ${userConfig.ECS_TASK_DEFINITION}`);
+                const describeTaskDefCommand = new DescribeTaskDefinitionCommand({
+                    taskDefinition: userConfig.ECS_TASK_DEFINITION
+                });
+                await ecsClient.send(describeTaskDefCommand);
+                console.log('Task definition verified successfully');
+            } catch (error: any) {
+                console.error('Task definition verification error:', error);
+                if (error.name === 'ClientError' || error.name === 'InvalidParameterException') {
+                    throw new Error(`Task definition "${userConfig.ECS_TASK_DEFINITION}" not found or invalid. Please register the task definition in AWS ECS first.`);
+                }
+                throw error;
             }
 
-            // Log the config being used (with sensitive data redacted)
-            console.log('Using AWS configuration:');
-            console.log('Region:', userConfig.AWS_REGION);
-            console.log('S3 Bucket:', userConfig.S3_BUCKET_NAME);
-            console.log('ECS Cluster:', userConfig.ECS_CLUSTER);
-            console.log('ECS Task Definition:', userConfig.ECS_TASK_DEFINITION);
+            // Run the ECS task directly
+            const command = new RunTaskCommand({
+                cluster: userConfig.ECS_CLUSTER,
+                taskDefinition: userConfig.ECS_TASK_DEFINITION,
+                launchType: 'FARGATE',
+                networkConfiguration: {
+                    awsvpcConfiguration: {
+                        subnets: userConfig.ECS_SUBNETS.split(','),
+                        securityGroups: userConfig.ECS_SECURITY_GROUPS.split(','),
+                        assignPublicIp: 'ENABLED'
+                    }
+                },
+                overrides: {
+                    containerOverrides: [{
+                        name: 'video-transcoder', // Make sure this matches your task definition container name
+                        environment: [
+                            { name: 'AWS_ACCESS_KEY_ID', value: userConfig.AWS_ACCESS_KEY_ID },
+                            { name: 'AWS_SECRET_ACCESS_KEY', value: userConfig.AWS_SECRET_ACCESS_KEY },
+                            { name: 'AWS_REGION', value: userConfig.AWS_REGION },
+                            { name: 'BUCKET_NAME', value: userConfig.S3_BUCKET_NAME },
+                            { name: 'KEY', value: videoKey },
+                            { name: 'JOB_ID', value: jobId }
+                        ]
+                    }]
+                }
+            });
 
-            const taskArn = await startECSTask(videoKey, jobId);
+            console.log('Sending RunTaskCommand to AWS ECS...');
+            const response = await ecsClient.send(command);
+            console.log('Received response from ECS:', JSON.stringify(response, null, 2));
 
-            if (!taskArn) {
-                activeJobs.get(jobId)!.status = 'FAILED';
-                activeJobs.get(jobId)!.logs!.push({
-                    timestamp: new Date().toISOString(),
-                    message: 'Failed to start ECS task: No task ARN returned'
-                });
-
-                res.status(500).json({
-                    success: false,
-                    error: 'Failed to start transcoding task'
-                });
-                return;
+            if (!response.tasks || response.tasks.length === 0) {
+                if (response.failures && response.failures.length > 0) {
+                    throw new Error(`Failed to start task: ${response.failures[0].reason}`);
+                }
+                throw new Error('No tasks were started');
             }
+
+            const taskArn = response.tasks[0].taskArn;
+            console.log(`Successfully started ECS task: ${taskArn}`);
 
             // Update the job with the task ARN
             const job = activeJobs.get(jobId)!;
@@ -796,7 +759,7 @@ app.post('/api/start-transcoding', async (req: Request, res: Response) => {
             });
 
             // Start monitoring job progress
-            monitorECSTask(jobId, taskArn);
+            monitorECSTask(jobId, taskArn!);
 
             console.log(`Successfully started transcoding job! Job ID: ${jobId}, Task ARN: ${taskArn}`);
 
@@ -808,6 +771,7 @@ app.post('/api/start-transcoding', async (req: Request, res: Response) => {
             });
         } catch (error: any) {
             console.error('Error starting ECS task:', error);
+            console.error('Error details:', JSON.stringify(error, null, 2));
 
             // Update job status to FAILED
             const job = activeJobs.get(jobId);
@@ -1073,96 +1037,6 @@ app.get('/api/test-connection', async (req: Request, res: Response) => {
         details // Include detailed error information
     });
 });
-
-// Function to start an ECS task
-async function startECSTask(videoKey: string, jobId: string) {
-    if (!userConfig) {
-        console.error('Configuration not loaded');
-        return null;
-    }
-
-    try {
-        console.log('Starting ECS task with these parameters:');
-        console.log(`Cluster: ${userConfig.ECS_CLUSTER}`);
-        console.log(`Task Definition: ${userConfig.ECS_TASK_DEFINITION}`);
-        console.log(`Subnets: ${userConfig.ECS_SUBNETS}`);
-        console.log(`Security Groups: ${userConfig.ECS_SECURITY_GROUPS}`);
-
-        // Create ECS client with credentials
-        const ecsClient = new ECSClient({
-            region: userConfig.AWS_REGION,
-            credentials: {
-                accessKeyId: userConfig.AWS_ACCESS_KEY_ID,
-                secretAccessKey: userConfig.AWS_SECRET_ACCESS_KEY,
-            }
-        });
-
-        // First, verify the task definition exists
-        try {
-            console.log(`Verifying task definition: ${userConfig.ECS_TASK_DEFINITION}`);
-            const describeTaskDefCommand = new DescribeTaskDefinitionCommand({
-                taskDefinition: userConfig.ECS_TASK_DEFINITION
-            });
-            await ecsClient.send(describeTaskDefCommand);
-            console.log('Task definition verified successfully');
-        } catch (error: any) {
-            console.error('Task definition verification error:', error);
-            if (error.name === 'ClientError' || error.name === 'InvalidParameterException') {
-                throw new Error(`Task definition "${userConfig.ECS_TASK_DEFINITION}" not found or invalid. Please register the task definition in AWS ECS first.`);
-            }
-            throw error;
-        }
-
-        // Start ECS task
-        console.log('Sending RunTaskCommand to AWS ECS...');
-        const command = new RunTaskCommand({
-            cluster: userConfig.ECS_CLUSTER,
-            taskDefinition: userConfig.ECS_TASK_DEFINITION,
-            launchType: 'FARGATE',
-            networkConfiguration: {
-                awsvpcConfiguration: {
-                    subnets: userConfig.ECS_SUBNETS.split(','),
-                    securityGroups: userConfig.ECS_SECURITY_GROUPS.split(','),
-                    assignPublicIp: 'ENABLED'
-                }
-            },
-            overrides: {
-                containerOverrides: [{
-                    name: 'video-transcoder', // Make sure this matches your task definition container name
-                    environment: [
-                        { name: 'AWS_ACCESS_KEY_ID', value: userConfig.AWS_ACCESS_KEY_ID },
-                        { name: 'AWS_SECRET_ACCESS_KEY', value: userConfig.AWS_SECRET_ACCESS_KEY },
-                        { name: 'AWS_REGION', value: userConfig.AWS_REGION },
-                        { name: 'BUCKET_NAME', value: userConfig.S3_BUCKET_NAME },
-                        { name: 'KEY', value: videoKey },
-                        { name: 'JOB_ID', value: jobId }
-                    ]
-                }]
-            }
-        });
-
-        console.log('Awaiting ECS task response...');
-        const response = await ecsClient.send(command);
-        console.log('Received response from ECS:', JSON.stringify(response, null, 2));
-
-        if (response.tasks && response.tasks.length > 0) {
-            const taskArn = response.tasks[0].taskArn;
-            console.log(`Successfully started ECS task: ${taskArn}`);
-            return taskArn;
-        } else {
-            console.error('No tasks returned from ECS');
-            if (response.failures && response.failures.length > 0) {
-                console.error('Task failures:', JSON.stringify(response.failures, null, 2));
-                throw new Error(`Failed to start task: ${response.failures[0].reason}`);
-            }
-            throw new Error('No tasks were started');
-        }
-    } catch (error: any) {
-        console.error('Error starting ECS task:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        throw new Error(`Failed to start ECS task: ${error.message}`);
-    }
-}
 
 // Start the server
 const PORT = parseInt(process.env.PORT || '3001', 10);

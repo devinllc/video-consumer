@@ -384,17 +384,27 @@
 
                 if (data.success) {
                     let message = `<h5>Connection Test Successful</h5>`;
-                    message += `<p>Successfully connected to S3 in region: ${data.region}</p>`;
+                    message += `<p>Successfully connected to S3 in region: <strong>${data.region || 'undefined'}</strong></p>`;
 
                     if (data.bucketExists) {
-                        message += `<p class="text-success">✓ Bucket "${data.bucketName}" exists</p>`;
+                        message += `<p class="text-success">✓ Bucket "<strong>${data.bucketName}</strong>" exists</p>`;
+                    } else if (data.bucketName) {
+                        message += `<p class="text-warning">⚠️ Bucket "<strong>${data.bucketName}</strong>" was not found. Make sure it exists or create it.</p>`;
+                        message += `<p>To create this bucket, run the following AWS CLI command:<br><code>aws s3 mb s3://${data.bucketName} --region ${data.region}</code></p>`;
                     } else {
-                        message += `<p class="text-warning">⚠️ Bucket "${data.bucketName}" was not found. Make sure it exists or create it.</p>`;
+                        message += `<p class="text-warning">⚠️ No bucket name was provided. Please enter an S3 bucket name.</p>`;
                     }
+
+                    // Display ECS configuration status
+                    message += `<hr><h6>Configuration Next Steps:</h6>`;
+                    message += `<p><strong>1.</strong> Your AWS credentials are valid.</p>`;
+                    message += `<p><strong>2.</strong> ${data.bucketExists ? 'Your S3 bucket exists.' : 'Create your S3 bucket (see instructions above).'}</p>`;
+                    message += `<p><strong>3.</strong> Click Save Configuration to store these settings.</p>`;
+                    message += `<p><strong>4.</strong> Test uploading a video file from the home page.</p>`;
 
                     alertDiv.innerHTML = `<div class="alert alert-success">${message}</div>`;
                 } else {
-                    throw new Error(data.error || 'Connection test failed');
+                    throw new Error(data.error || (data.errors && data.errors.length > 0 ? data.errors[0] : 'Connection test failed'));
                 }
             } catch (error) {
                 console.error('Test connection error:', error);

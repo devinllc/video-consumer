@@ -118,11 +118,12 @@ try {
 // JWT verification middleware
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-const authMiddleware = (req: Request, res: Response, next: Function) => {
+const authMiddleware = (req: Request, res: Response, next: Function): void => {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Unauthorized - Missing or invalid token format' });
+            res.status(401).json({ error: 'Unauthorized - Missing or invalid token format' });
+            return;
         }
 
         const token = authHeader.split(' ')[1];
@@ -135,7 +136,7 @@ const authMiddleware = (req: Request, res: Response, next: Function) => {
         next();
     } catch (error) {
         console.error('Auth error:', error);
-        return res.status(401).json({ error: 'Unauthorized - Invalid token' });
+        res.status(401).json({ error: 'Unauthorized - Invalid token' });
     }
 };
 
@@ -149,8 +150,8 @@ const getUserPreferences = async (userId: string): Promise<UserPreferences> => {
             }
         });
 
-        if (response.data && response.data.preferences) {
-            return response.data.preferences;
+        if (response.data && (response.data as any).preferences) {
+            return (response.data as any).preferences;
         }
 
         return { resourceType: 'selfManaged' };
@@ -194,58 +195,63 @@ const getAwsConfig = async (req: Request): Promise<Config> => {
 };
 
 // API endpoint to save configuration
-app.post('/api/config', authMiddleware, (req: Request, res: Response): void => {
-    try {
-        const newConfig = req.body as Config;
+app.post('/api/config', (req: Request, res: Response) => {
+    // Apply auth middleware manually
+    authMiddleware(req, res, () => {
+        try {
+            const newConfig = req.body as Config;
 
-        // Validate required fields
-        const requiredFields = [
-            'AWS_REGION',
-            'AWS_ACCESS_KEY_ID',
-            'AWS_SECRET_ACCESS_KEY',
-            'S3_BUCKET_NAME',
-            'ECS_CLUSTER',
-            'ECS_TASK_DEFINITION',
-            'ECS_SUBNETS',
-            'ECS_SECURITY_GROUPS'
-        ];
+            // Validate required fields
+            const requiredFields = [
+                'AWS_REGION',
+                'AWS_ACCESS_KEY_ID',
+                'AWS_SECRET_ACCESS_KEY',
+                'S3_BUCKET_NAME',
+                'ECS_CLUSTER',
+                'ECS_TASK_DEFINITION',
+                'ECS_SUBNETS',
+                'ECS_SECURITY_GROUPS'
+            ];
 
-        const missingFields = requiredFields.filter(field => !newConfig[field as keyof Config]);
+            const missingFields = requiredFields.filter(field => !newConfig[field as keyof Config]);
 
-        if (missingFields.length > 0) {
-            return res.status(400).json({
-                error: 'Missing required configuration fields',
-                missingFields
+            if (missingFields.length > 0) {
+                res.status(400).json({
+                    error: 'Missing required configuration fields',
+                    missingFields
+                });
+                return;
+            }
+
+            // Save user configuration
+            userConfig = newConfig;
+
+            // Save to file
+            const configPath = path.join(__dirname, 'config.json');
+            fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
+
+            res.json({
+                success: true,
+                message: 'Configuration saved successfully'
+            });
+        } catch (error) {
+            console.error('Error saving configuration:', error);
+            res.status(500).json({
+                error: 'Failed to save configuration',
+                details: (error as Error).message
             });
         }
-
-        // Save user configuration
-        userConfig = newConfig;
-
-        // Save to file
-        const configPath = path.join(__dirname, 'config.json');
-        fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
-
-        res.json({
-            success: true,
-            message: 'Configuration saved successfully'
-        });
-    } catch (error) {
-        console.error('Error saving configuration:', error);
-        res.status(500).json({
-            error: 'Failed to save configuration',
-            details: (error as Error).message
-        });
-    }
+    });
 });
 
 // API endpoint to check configuration
-app.get('/api/config', (_req: Request, res: Response): void => {
+app.get('/api/config', (_req: Request, res: Response) => {
     if (!userConfig) {
-        return res.json({
+        res.json({
             configured: false,
             message: 'System not configured. Please configure the system first.'
         });
+        return;
     }
 
     // Return config without sensitive data
@@ -260,15 +266,17 @@ app.get('/api/config', (_req: Request, res: Response): void => {
 });
 
 // API endpoint for video upload
-app.post('/api/upload', upload.single('video'), async (req: Request, res: Response): Promise<void> => {
+app.post('/api/upload', upload.single('video'), async (req: Request, res: Response) => {
     if (!userConfig) {
-        return res.status(400).json({ error: 'System not configured' });
+        res.status(400).json({ error: 'System not configured' });
+        return;
     }
 
     try {
         const file = req.file as Express.Multer.File;
         if (!file) {
-            return res.status(400).json({ error: 'No video file provided' });
+            res.status(400).json({ error: 'No video file provided' });
+            return;
         }
 
         console.log('Received file:', {
@@ -739,15 +747,16 @@ const taskConfigurations = {
 };
 
 // API endpoint to start transcoding
-app.post('/api/start-transcoding', async (req: Request, res: Response): Promise<void> => {
+app.post('/api/start-transcoding', async (req: Request, res: Response) => {
     const { videoKey, performanceLevel } = req.body;
 
     try {
         if (!videoKey) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 error: 'Video key is required'
             });
+            return;
         }
 
         // Generate a unique job ID
@@ -758,10 +767,11 @@ app.post('/api/start-transcoding', async (req: Request, res: Response): Promise<
         const taskArn = await startECSTask(videoKey, jobId);
 
         if (!taskArn) {
-            return res.status(500).json({
+            res.status(500).json({
                 success: false,
                 error: 'Failed to start transcoding task'
             });
+            return;
         }
 
         // Add the job to the active jobs list
@@ -794,12 +804,13 @@ app.post('/api/start-transcoding', async (req: Request, res: Response): Promise<
 });
 
 // API endpoint to get job status and logs
-app.get('/api/jobs/:jobId', async (req: Request, res: Response): Promise<void> => {
+app.get('/api/jobs/:jobId', async (req: Request, res: Response) => {
     const { jobId } = req.params;
     const job = activeJobs.get(jobId);
 
     if (!job) {
-        return res.status(404).json({ error: 'Job not found' });
+        res.status(404).json({ error: 'Job not found' });
+        return;
     }
 
     res.json({
@@ -824,12 +835,13 @@ app.get('/api/jobs', (_req: Request, res: Response): void => {
 });
 
 // API endpoint to test connection
-app.get('/api/test-connection', async (req: Request, res: Response): Promise<void> => {
+app.get('/api/test-connection', async (req: Request, res: Response) => {
     if (!userConfig) {
-        return res.json({
+        res.json({
             success: false,
             errors: ['Configuration not loaded. Please save configuration first.']
         });
+        return;
     }
 
     const errors: string[] = [];

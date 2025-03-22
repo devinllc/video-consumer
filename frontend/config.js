@@ -2,7 +2,7 @@
 window.API_CONFIG = {
     // Base URL for API endpoints
     // Change this when deploying to production
-    API_URL: 'http://localhost:3001',
+    API_URL: 'http://13.235.75.73:3001',
 
     // API endpoints
     ENDPOINTS: {

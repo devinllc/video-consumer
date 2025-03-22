@@ -123,7 +123,7 @@ app.post('/api/test-connection', async (req, res) => {
     try {
         // Use the config from the request body temporarily
         const tempConfig = req.body;
-        
+
         if (!tempConfig || !tempConfig.AWS_REGION || !tempConfig.AWS_ACCESS_KEY_ID || !tempConfig.AWS_SECRET_ACCESS_KEY) {
             return res.json({
                 success: false,
@@ -146,11 +146,23 @@ app.post('/api/test-connection', async (req, res) => {
         });
 
         try {
-            await s3Client.send(new ListBucketsCommand({}));
-            
+            // Test basic S3 connection by listing buckets
+            const listBucketsResponse = await s3Client.send(new ListBucketsCommand({}));
+
+            // Check if the specified bucket exists in the list
+            let bucketExists = false;
+            if (tempConfig.S3_BUCKET_NAME && listBucketsResponse.Buckets) {
+                bucketExists = listBucketsResponse.Buckets.some(
+                    bucket => bucket.Name === tempConfig.S3_BUCKET_NAME
+                );
+            }
+
             res.json({
                 success: true,
-                message: 'Successfully connected to AWS S3 with provided credentials'
+                message: 'Successfully connected to AWS S3 with provided credentials',
+                region: tempConfig.AWS_REGION,
+                bucketName: tempConfig.S3_BUCKET_NAME,
+                bucketExists: bucketExists
             });
         } catch (error) {
             console.error('Error testing S3 connection:', error);

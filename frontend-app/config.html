@@ -260,7 +260,18 @@
 
                 // Get form data
                 const formData = new FormData(this);
-                const config = Object.fromEntries(formData.entries());
+
+                // Map form field IDs to expected server field names
+                const config = {
+                    AWS_REGION: document.getElementById('awsRegion').value,
+                    AWS_ACCESS_KEY_ID: document.getElementById('awsAccessKeyId').value,
+                    AWS_SECRET_ACCESS_KEY: document.getElementById('awsSecretKey').value,
+                    S3_BUCKET_NAME: document.getElementById('s3BucketName').value,
+                    ECS_CLUSTER: document.getElementById('ecsCluster').value,
+                    ECS_TASK_DEFINITION: document.getElementById('ecsTaskDefinition').value,
+                    ECS_SUBNETS: document.getElementById('ecsSubnets').value,
+                    ECS_SECURITY_GROUPS: document.getElementById('ecsSecurityGroups').value
+                };
 
                 alertDiv.style.display = 'block';
                 alertDiv.innerHTML = `
@@ -280,6 +291,7 @@
                     }
 
                     console.log('Sending config to:', apiUrl);
+                    console.log('Config data:', config);
 
                     const response = await fetch(apiUrl, {
                         method: 'POST',
@@ -330,11 +342,18 @@
 
         async function testConnection() {
             const form = document.getElementById('configForm');
-            const formData = new FormData(form);
-            const configData = {};
-            formData.forEach((value, key) => {
-                configData[key] = value;
-            });
+
+            // Create config object with properly mapped field names
+            const configData = {
+                AWS_REGION: document.getElementById('awsRegion').value,
+                AWS_ACCESS_KEY_ID: document.getElementById('awsAccessKeyId').value,
+                AWS_SECRET_ACCESS_KEY: document.getElementById('awsSecretKey').value,
+                S3_BUCKET_NAME: document.getElementById('s3BucketName').value,
+                ECS_CLUSTER: document.getElementById('ecsCluster').value,
+                ECS_TASK_DEFINITION: document.getElementById('ecsTaskDefinition').value,
+                ECS_SUBNETS: document.getElementById('ecsSubnets').value,
+                ECS_SECURITY_GROUPS: document.getElementById('ecsSecurityGroups').value
+            };
 
             // Make sure alertDiv is accessible
             const alertDiv = document.getElementById('alert');
@@ -351,6 +370,8 @@
                 }
 
                 console.log('Testing connection with:', testApiUrl);
+                console.log('Config data for test:', configData);
+
                 const response = await fetch(testApiUrl, {
                     method: 'POST',
                     headers: {

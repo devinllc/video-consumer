@@ -164,6 +164,11 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async function () {
+            // Debug API configuration
+            console.log('API CONFIG:', window.API_CONFIG);
+            console.log('API Base URL:', window.API_CONFIG.BASE_URL);
+            console.log('Using getApiUrl function:', typeof window.getApiUrl);
+
             // Load existing configuration
             try {
                 // Use the API_CONFIG to construct the URL
@@ -216,8 +221,8 @@
                 `;
 
                 try {
-                    // Use relative URL instead of window.location.origin
-                    const apiUrl = '/api/config';
+                    // Use API_CONFIG to construct the URL
+                    const apiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.CONFIG);
                     console.log('Sending config to:', apiUrl);
 
                     const response = await fetch(apiUrl, {
@@ -258,7 +263,7 @@
                             <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
                                     onclick="document.getElementById('debug-info').style.display='block'">Show Details</button>
                             <div id="debug-info" class="mt-2" style="display:none">
-                                <p>API URL: ${'/api/config'}</p>
+                                <p>API URL: ${apiUrl}</p>
                                 <p>Please check browser console for more details.</p>
                             </div>
                         </div>

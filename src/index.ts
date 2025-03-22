@@ -1025,126 +1025,27 @@ app.get('/api/jobs/:jobId', async (req: Request, res: Response) => {
     res.json(responseObj);
 });
 
-// API endpoint to list all jobs
-app.get('/api/jobs', async (_req: Request, res: Response) => {
-    try {
-        // Even if we have no active jobs in memory, check AWS for running tasks
-        if (activeJobs.size === 0 && userConfig) {
-            try {
-                console.log('No jobs found in memory, checking AWS ECS for running tasks...');
-
-                // Create ECS client
-                const ecsClient = new ECSClient({
-                    region: userConfig.AWS_REGION,
-                    credentials: {
-                        accessKeyId: userConfig.AWS_ACCESS_KEY_ID,
-                        secretAccessKey: userConfig.AWS_SECRET_ACCESS_KEY,
-                    }
-                });
-
-                // First get all task ARNs in the cluster
-                const listTasksCommand = {
-                    cluster: userConfig.ECS_CLUSTER,
-                };
-
-                try {
-                    // This will list all tasks in the cluster
-                    const listResponse = await ecsClient.send(new ListTasksCommand(listTasksCommand));
-                    console.log('Found tasks in AWS:', listResponse);
-
-                    if (listResponse.taskArns && listResponse.taskArns.length > 0) {
-                        // Get details of each task
-                        const tasksCommand = {
-                            cluster: userConfig.ECS_CLUSTER,
-                            tasks: listResponse.taskArns
-                        };
-
-                        const taskDetails = await ecsClient.send(new DescribeTasksCommand(tasksCommand));
-                        console.log('Task details:', JSON.stringify(taskDetails));
-
-                        // Create synthetic job entries for each task
-                        for (const task of taskDetails.tasks || []) {
-                            console.log(`Processing task: ${task.taskArn}`);
-
-                            // Try to find matching job ID in container overrides
-                            let jobId = null;
-                            let videoKey = null;
-
-                            // Try to extract from container environment variables
-                            if (task.overrides?.containerOverrides) {
-                                for (const container of task.overrides.containerOverrides) {
-                                    if (container.environment) {
-                                        for (const env of container.environment) {
-                                            if (env.name === 'JOB_ID') jobId = env.value;
-                                            if (env.name === 'KEY') videoKey = env.value;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // If we couldn't find from overrides, try to create a synthetic ID
-                            if (!jobId) {
-                                console.log("Couldn't find JOB_ID in task, creating synthetic ID");
-                                // Extract the last part of the task ARN which is unique
-                                const taskParts = task.taskArn?.split('/');
-                                jobId = taskParts ? taskParts[taskParts.length - 1] : null;
-                            }
-
-                            if (jobId) {
-                                console.log(`Found job ID: ${jobId}`);
-
-                                // Add to active jobs if not already present
-                                if (!activeJobs.has(jobId)) {
-                                    activeJobs.set(jobId, {
-                                        taskArn: task.taskArn,
-                                        videoKey: videoKey || 'unknown',
-                                        status: task.lastStatus === 'STOPPED' ? 'COMPLETED' : 'RUNNING',
-                                        startTime: task.createdAt || new Date(),
-                                        logs: [{
-                                            timestamp: new Date().toISOString(),
-                                            message: `Recovered task from AWS ECS: ${task.taskArn}`
-                                        }],
-                                        performanceLevel: 'standard',
-                                        notifiedRunning: true
-                                    });
-
-                                    // Start monitoring this task if it's still running
-                                    if (task.lastStatus !== 'STOPPED') {
-                                        monitorECSTask(jobId, task.taskArn!);
-                                    } else {
-                                        // For completed tasks, add sample logs
-                                        addSampleTranscodingLogs(jobId);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (listError) {
-                    console.error('Error listing tasks:', listError);
-                }
-            } catch (error: any) {
-                console.error('Error checking AWS for running tasks:', error);
-                // Continue with existing jobs even if AWS check fails
-            }
-        }
-
-        if (activeJobs.size === 0) {
-            res.json([]);
-            return;
-        }
-
-        const jobs = Array.from(activeJobs.entries()).map(([jobId, job]) => ({
+// API endpoint to get all jobs
+app.get('/api/jobs', (req: Request, res: Response) => {
+    // Convert the Map to an array and transform to the needed format
+    const jobs = Array.from(activeJobs).map(([jobId, job]) => {
+        // Format job for API response
+        return {
             jobId,
             status: job.status,
             startTime: job.startTime,
-            videoKey: job.videoKey
-        }));
+            videoKey: job.videoKey,
+            performanceLevel: job.performanceLevel || 'standard',
+            streaming: job.streaming,
+            // Include a count of logs but not the logs themselves to reduce payload
+            logCount: job.logs ? job.logs.length : 0
+        };
+    });
 
-        res.json(jobs);
-    } catch (error: any) {
-        console.error('Error listing jobs:', error);
-        res.status(500).json({ error: 'Failed to list jobs', details: error.message });
-    }
+    // Log the result for debugging
+    console.log(`Returning ${jobs.length} jobs from API`);
+
+    res.json(jobs);
 });
 
 // API endpoint to test connection
@@ -1569,24 +1470,220 @@ app.post('/api/import-jobs', (req: Request, res: Response) => {
     })();
 });
 
-// Start the server
-const PORT = parseInt(process.env.PORT || '3001', 10);
+// Load any saved jobs from storage 
+loadJobsFromStorage();
 
-function startServer(port: number) {
-    const server = app.listen(port)
-        .on('error', (err: any) => {
-            if (err.code === 'EADDRINUSE') {
-                console.log(`Port ${port} is busy, trying ${port + 1}...`);
-                server.close();
-                startServer(port + 1);
-            } else {
-                console.error('Server error:', err);
+// Flag to track if initial job import has been done
+let initialJobImportDone = false;
+
+// Automatically import jobs from AWS on server start (after configuration is set)
+async function importJobsFromAWS() {
+    if (initialJobImportDone || !userConfig) return;
+
+    console.log("Performing initial job import from AWS...");
+    try {
+        // Create S3 client to scan for processed videos
+        const s3Client = new S3Client({
+            region: userConfig.AWS_REGION,
+            credentials: {
+                accessKeyId: userConfig.AWS_ACCESS_KEY_ID,
+                secretAccessKey: userConfig.AWS_SECRET_ACCESS_KEY
             }
-        })
-        .on('listening', () => {
-            console.log(`Server running on port ${port}`);
         });
+
+        // Look for output directories in S3
+        try {
+            // List objects in S3 output directory
+            const listParams = {
+                Bucket: userConfig.S3_BUCKET_NAME,
+                Prefix: 'output/',
+                Delimiter: '/'
+            };
+
+            const s3ListResponse = await s3Client.send(new ListObjectsV2Command(listParams));
+
+            if (s3ListResponse.CommonPrefixes) {
+                // Process each directory (representing a completed job)
+                for (const prefix of s3ListResponse.CommonPrefixes) {
+                    if (prefix.Prefix) {
+                        const dirParts = prefix.Prefix.split('/');
+                        const videoId = dirParts[dirParts.length - 2]; // Get the ID
+
+                        if (videoId && videoId.length > 5) {
+                            // Create a synthetic job ID if needed
+                            const jobId = uuidv4();
+
+                            // Check if we already have this job (by videoId)
+                            const existingJob = Array.from(activeJobs.values()).find(
+                                job => job.videoKey && job.videoKey.includes(videoId)
+                            );
+
+                            if (!existingJob) {
+                                // Create a synthetic job entry for this completed job
+                                const jobCreationTime = new Date();
+                                // Set time a bit in the past
+                                jobCreationTime.setHours(jobCreationTime.getHours() - 1);
+
+                                // Add to active jobs
+                                activeJobs.set(jobId, {
+                                    status: 'COMPLETED',
+                                    startTime: jobCreationTime,
+                                    videoKey: `input/${videoId}.mp4`, // Reconstruct likely input key
+                                    logs: [
+                                        {
+                                            timestamp: jobCreationTime.toISOString(),
+                                            message: 'Imported completed job from S3'
+                                        }
+                                    ],
+                                    performanceLevel: 'standard'
+                                });
+
+                                // Add sample logs for better UX
+                                addSampleTranscodingLogs(jobId);
+
+                                // Add streaming info to the job
+                                const job = activeJobs.get(jobId);
+                                if (job) {
+                                    const baseUrl = `https://s3.${userConfig.AWS_REGION}.amazonaws.com/${userConfig.S3_BUCKET_NAME}/output/${videoId}`;
+
+                                    updateJob(jobId, {
+                                        streaming: {
+                                            videoId,
+                                            masterPlaylist: `${baseUrl}/master.m3u8`,
+                                            resolutions: {
+                                                "720p": `${baseUrl}/720p/index.m3u8`,
+                                                "480p": `${baseUrl}/480p/index.m3u8`,
+                                                "360p": `${baseUrl}/360p/index.m3u8`
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (s3Error) {
+            console.error('Error scanning S3 for completed jobs:', s3Error);
+        }
+
+        // Also check for running ECS tasks
+        try {
+            const ecsClient = new ECSClient({
+                region: userConfig.AWS_REGION,
+                credentials: {
+                    accessKeyId: userConfig.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: userConfig.AWS_SECRET_ACCESS_KEY
+                }
+            });
+
+            // List running tasks
+            const listTasksCommand = {
+                cluster: userConfig.ECS_CLUSTER
+            };
+
+            const tasksResponse = await ecsClient.send(new ListTasksCommand(listTasksCommand));
+
+            if (tasksResponse.taskArns && tasksResponse.taskArns.length > 0) {
+                // Get task details
+                const describeTasksCommand = {
+                    cluster: userConfig.ECS_CLUSTER,
+                    tasks: tasksResponse.taskArns
+                };
+
+                const taskDetails = await ecsClient.send(new DescribeTasksCommand(describeTasksCommand));
+
+                // Process each task
+                for (const task of taskDetails.tasks || []) {
+                    // Extract job ID from task
+                    let jobId = null;
+                    let videoKey = null;
+
+                    // Try to get from container environment
+                    if (task.overrides?.containerOverrides) {
+                        for (const container of task.overrides.containerOverrides) {
+                            if (container.environment) {
+                                for (const env of container.environment) {
+                                    if (env.name === 'JOB_ID') jobId = env.value;
+                                    if (env.name === 'KEY') videoKey = env.value;
+                                }
+                            }
+                        }
+                    }
+
+                    // If no job ID found, create a synthetic one based on task ARN
+                    if (!jobId) {
+                        const taskParts = task.taskArn?.split('/');
+                        if (taskParts) {
+                            jobId = taskParts[taskParts.length - 1];
+                        } else {
+                            jobId = uuidv4();
+                        }
+                    }
+
+                    // If we have a job ID but no video key, set a default one
+                    if (jobId && !videoKey) {
+                        videoKey = 'unknown-video-path';
+                    }
+
+                    // Only add if we have both job ID and video key
+                    if (jobId && videoKey) {
+                        // Check if we already have this job
+                        if (!activeJobs.has(jobId)) {
+                            // Create job entry
+                            activeJobs.set(jobId, {
+                                taskArn: task.taskArn,
+                                status: task.lastStatus === 'STOPPED' ? 'COMPLETED' : 'RUNNING',
+                                startTime: task.createdAt || new Date(),
+                                videoKey,
+                                logs: [
+                                    {
+                                        timestamp: new Date().toISOString(),
+                                        message: `Imported task ${task.taskArn} from AWS ECS`
+                                    }
+                                ],
+                                notifiedRunning: true,
+                                performanceLevel: 'standard'
+                            });
+
+                            // Start monitoring still-running tasks
+                            if (task.lastStatus !== 'STOPPED') {
+                                monitorECSTask(jobId, task.taskArn!);
+                            } else {
+                                // For completed tasks, add sample logs
+                                addSampleTranscodingLogs(jobId);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (ecsError) {
+            console.error('Error scanning ECS for tasks:', ecsError);
+        }
+
+        // Save all imported jobs
+        saveJobsToStorage();
+        initialJobImportDone = true;
+        console.log(`Initial job import complete. Found ${activeJobs.size} jobs.`);
+    } catch (error) {
+        console.error('Error during initial job import:', error);
+    }
 }
+
+// Get port from environment or use default
+const PORT = process.env.PORT || 3001;
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`UI accessible at http://localhost:${PORT}`);
+    // After server starts, check and import AWS jobs
+    setTimeout(() => {
+        console.log("Checking for existing AWS tasks...");
+        // First attempt to load any jobs after 5 seconds (give config time to load)
+        importJobsFromAWS();
+    }, 5000);
+});
 
 // API endpoint to check if upload is ready
 app.get('/api/check-upload-ready', (_req: Request, res: Response) => {
@@ -1613,5 +1710,3 @@ app.get('/api/check-upload-ready', (_req: Request, res: Response) => {
         res.status(500).json({ ready: false, error: 'Internal server error' });
     }
 });
-
-startServer(PORT);

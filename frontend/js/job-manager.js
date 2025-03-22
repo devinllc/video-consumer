@@ -1,420 +1,314 @@
 // Job Manager to handle all job interactions
 class JobManager {
     constructor() {
-        this.activeJobs = new Map();
-        this.pollInterval = null;
-        this.retryCount = 0;
-        this.maxRetries = 10;
+        this.jobsContainer = document.getElementById('jobs-container');
+        this.noJobsMessage = document.getElementById('no-jobs-message');
+        this.activeJobs = {};
+        this.pollingIntervalId = null;
+        this.lastJobCount = 0;
+        this.isInitialLoad = true;
+
+        // Start polling for jobs
+        this.startPolling();
     }
 
     // Start polling for job updates
     startPolling() {
-        if (this.pollInterval) {
-            clearInterval(this.pollInterval);
-        }
+        // Initial fetch
+        this.fetchJobs();
 
-        this.retryCount = 0;
-        this.pollInterval = setInterval(() => this.fetchJobs(), 2000);
-        this.fetchJobs(); // Fetch immediately on start
+        // Set up interval for continuous polling (every 5 seconds)
+        this.pollingIntervalId = setInterval(() => {
+            this.fetchJobs();
+        }, 5000);
     }
 
     // Stop polling for job updates
     stopPolling() {
-        if (this.pollInterval) {
-            clearInterval(this.pollInterval);
-            this.pollInterval = null;
+        if (this.pollingIntervalId) {
+            clearInterval(this.pollingIntervalId);
+            this.pollingIntervalId = null;
         }
     }
 
     // Fetch all jobs from the API
     async fetchJobs() {
         try {
-            // Make sure the server is running on the correct port
-            const ports = [3001, 3002, 3003]; // Try all possible ports
-            let jobsData = [];
-            let fetchSucceeded = false;
-
-            for (const port of ports) {
-                if (fetchSucceeded) continue;
-
+            // On initial load or when no jobs are found, try to import from AWS first
+            if (this.isInitialLoad || Object.keys(this.activeJobs).length === 0) {
                 try {
-                    // First try to import jobs from AWS
-                    console.log(`Attempting to import jobs from AWS via port ${port}...`);
-                    try {
-                        const importResponse = await fetch(`http://localhost:${port}/api/import-jobs`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' }
-                        });
-
-                        if (importResponse.ok) {
-                            const importResult = await importResponse.json();
-                            console.log('Import result:', importResult);
-                        }
-                    } catch (importErr) {
-                        console.log(`Failed to import jobs from port ${port}:`, importErr);
-                    }
-
-                    // Now get the jobs list
-                    const response = await fetch(`http://localhost:${port}/api/jobs`, {
-                        method: 'GET',
-                        headers: { 'Content-Type': 'application/json' }
+                    console.log("Triggering job import from AWS...");
+                    const importResponse = await fetch('/api/import-jobs', {
+                        method: 'POST'
                     });
-
-                    if (!response.ok) continue;
-
-                    jobsData = await response.json();
-                    fetchSucceeded = true;
-                    console.log(`Successfully fetched jobs from port ${port}:`, jobsData);
-                    window.apiPort = port; // Remember this port for future requests
-                } catch (err) {
-                    console.log(`Failed to fetch jobs from port ${port}:`, err);
+                    const importResult = await importResponse.json();
+                    console.log("Import result:", importResult);
+                    this.isInitialLoad = false;
+                } catch (importError) {
+                    console.error("Error importing jobs:", importError);
                 }
             }
 
-            if (!fetchSucceeded) {
-                this.retryCount++;
-                console.log(`Failed to fetch jobs from any port. Retry ${this.retryCount}/${this.maxRetries}`);
+            // Fetch jobs list
+            const response = await fetch('/api/jobs');
+            const jobs = await response.json();
 
-                if (this.retryCount >= this.maxRetries) {
-                    this.stopPolling();
-                    this.showError("Server connection lost. Please refresh the page.");
+            // Track if we've added any new jobs
+            let newJobsAdded = false;
+
+            // Process each job
+            jobs.forEach(job => {
+                // Check if this is a new job
+                if (!this.activeJobs[job.jobId]) {
+                    newJobsAdded = true;
                 }
-                return;
+
+                // Add or update the job in our local state
+                this.activeJobs[job.jobId] = job;
+
+                // Refresh the job details (logs, etc.) if it's already displayed
+                if (document.getElementById(`job-${job.jobId}`)) {
+                    this.fetchJobDetails(job.jobId);
+                }
+            });
+
+            // If the job count changed, completely refresh the display
+            if (jobs.length !== this.lastJobCount || newJobsAdded) {
+                console.log(`Job count changed from ${this.lastJobCount} to ${jobs.length}. Refreshing display.`);
+                this.lastJobCount = jobs.length;
+                this.renderJobsList();
             }
 
-            // Reset retry count on success
-            this.retryCount = 0;
-
-            // Update job list
-            this.updateJobList(jobsData);
-
-            // Also fetch individual job details for any active jobs
-            for (const job of jobsData) {
-                this.fetchJobDetails(job.jobId);
-            }
-
-            if (jobsData.length === 0) {
-                document.getElementById('jobs-list').innerHTML = '<tr><td colspan="4" class="text-center">No active jobs found</td></tr>';
+            // Toggle visibility of the no-jobs message
+            if (jobs.length > 0) {
+                this.noJobsMessage.style.display = 'none';
+                this.jobsContainer.style.display = 'block';
+            } else {
+                this.noJobsMessage.style.display = 'block';
+                this.jobsContainer.style.display = 'none';
             }
         } catch (error) {
             console.error('Error fetching jobs:', error);
-            document.getElementById('jobs-list').innerHTML = '<tr><td colspan="4" class="text-center">Error fetching jobs</td></tr>';
         }
-    }
-
-    // Update the job list in the UI
-    updateJobList(jobsData) {
-        // If no jobs, show message
-        if (jobsData.length === 0) {
-            document.getElementById('jobs-list').innerHTML = '<tr><td colspan="4" class="text-center">No active jobs found</td></tr>';
-            return;
-        }
-
-        // Build job list HTML
-        let jobsHtml = '';
-
-        jobsData.forEach(job => {
-            const jobId = job.jobId;
-            const status = job.status;
-
-            // Track this job if it's new
-            if (!this.activeJobs.has(jobId)) {
-                this.activeJobs.set(jobId, {
-                    status: status,
-                    lastUpdated: new Date()
-                });
-            }
-
-            const videoName = job.videoKey ? job.videoKey.split('/').pop() : 'Unknown';
-            const startTime = new Date(job.startTime).toLocaleString();
-
-            let statusClass = '';
-            switch (status) {
-                case 'RUNNING':
-                    statusClass = 'badge bg-info';
-                    break;
-                case 'COMPLETED':
-                    statusClass = 'badge bg-success';
-                    break;
-                case 'FAILED':
-                    statusClass = 'badge bg-danger';
-                    break;
-                default:
-                    statusClass = 'badge bg-secondary';
-            }
-
-            jobsHtml += `
-            <tr data-job-id="${jobId}">
-                <td>${jobId.substring(0, 8)}...</td>
-                <td>${videoName}</td>
-                <td><span class="${statusClass}">${status}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-primary view-job" data-job-id="${jobId}">View</button>
-                </td>
-            </tr>
-            `;
-        });
-
-        document.getElementById('jobs-list').innerHTML = jobsHtml;
-
-        // Add event listeners to view buttons
-        document.querySelectorAll('.view-job').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const jobId = e.target.getAttribute('data-job-id');
-                this.showJobDetailsModal(jobId);
-            });
-        });
     }
 
     // Fetch details for a specific job
     async fetchJobDetails(jobId) {
         try {
-            const port = window.apiPort || 3001;
-            const response = await fetch(`http://localhost:${port}/api/jobs/${jobId}`, {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
-            });
-
+            const response = await fetch(`/api/jobs/${jobId}`);
             if (!response.ok) {
-                throw new Error(`Failed to fetch job details: ${response.status}`);
+                throw new Error(`HTTP error ${response.status}`);
             }
 
             const jobDetails = await response.json();
 
-            // Store job details in the active jobs map
-            const existingJob = this.activeJobs.get(jobId) || {};
-            this.activeJobs.set(jobId, {
-                ...existingJob,
-                ...jobDetails,
-                lastUpdated: new Date()
-            });
+            // Update our local copy
+            this.activeJobs[jobId] = { ...this.activeJobs[jobId], ...jobDetails };
 
-            // If there's an open modal for this job, update it
-            const modal = document.getElementById('jobDetailsModal');
-            if (modal && modal.getAttribute('data-job-id') === jobId) {
-                this.updateJobDetailsModal(jobId);
-            }
-
-            return jobDetails;
+            // Update the job card with logs and status
+            this.updateJobCard(jobId, jobDetails);
         } catch (error) {
-            console.error(`Error fetching job details for ${jobId}:`, error);
-            return null;
+            console.error(`Error fetching details for job ${jobId}:`, error);
         }
     }
 
-    // Show job details in a modal
-    async showJobDetailsModal(jobId) {
-        // Create modal if it doesn't exist
-        let modal = document.getElementById('jobDetailsModal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.className = 'modal fade';
-            modal.id = 'jobDetailsModal';
-            modal.setAttribute('tabindex', '-1');
-            modal.setAttribute('aria-labelledby', 'jobDetailsModalLabel');
-            modal.setAttribute('aria-hidden', 'true');
+    renderJobsList() {
+        // Clear the container first
+        this.jobsContainer.innerHTML = '';
 
-            modal.innerHTML = `
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="jobDetailsModalLabel">Job Details</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <strong>Job ID:</strong> <span id="job-id"></span>
-                        </div>
-                        <div class="mb-3">
-                            <strong>Status:</strong> <span id="job-status"></span>
-                        </div>
-                        <div class="mb-3">
-                            <strong>Video:</strong> <span id="job-video"></span>
-                        </div>
-                        <div class="mb-3">
-                            <strong>Start Time:</strong> <span id="job-start-time"></span>
-                        </div>
-                        <div id="streaming-info-container" class="mb-3 d-none">
-                            <strong>Streaming:</strong>
-                            <div id="streaming-info" class="mt-2"></div>
-                        </div>
-                        <div class="mb-3">
-                            <strong>Logs:</strong>
-                            <div id="job-logs" class="mt-2 border p-2 bg-dark text-light" style="height: 300px; overflow-y: auto; font-family: monospace;"></div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="button" id="refresh-logs-btn" class="btn btn-primary">Refresh Logs</button>
-                    </div>
-                </div>
-            </div>
-            `;
+        // Get all jobs and sort by start time (newest first)
+        const jobs = Object.values(this.activeJobs)
+            .sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
 
-            document.body.appendChild(modal);
+        // Create a card for each job
+        jobs.forEach(job => {
+            const jobCard = this.createJobCard(job);
+            this.jobsContainer.appendChild(jobCard);
 
-            // Add event listener for refresh button
-            document.getElementById('refresh-logs-btn').addEventListener('click', () => {
-                const currentJobId = modal.getAttribute('data-job-id');
-                if (currentJobId) {
-                    this.fetchJobDetails(currentJobId);
-                }
-            });
-        }
-
-        // Set the current job ID
-        modal.setAttribute('data-job-id', jobId);
-
-        // Fetch job details if we don't have them
-        if (!this.activeJobs.has(jobId) || !this.activeJobs.get(jobId).logs) {
-            await this.fetchJobDetails(jobId);
-        }
-
-        // Update modal content
-        this.updateJobDetailsModal(jobId);
-
-        // Show the modal
-        const modalInstance = new bootstrap.Modal(modal);
-        modalInstance.show();
+            // Fetch detailed info for this job (logs, etc.)
+            this.fetchJobDetails(job.jobId);
+        });
     }
 
-    // Update the job details modal with current information
-    updateJobDetailsModal(jobId) {
-        const job = this.activeJobs.get(jobId);
-        if (!job) return;
+    createJobCard(job) {
+        const card = document.createElement('div');
+        card.className = 'job-card';
+        card.id = `job-${job.jobId}`;
 
-        document.getElementById('job-id').textContent = jobId;
-
-        // Set status with appropriate styling
-        const statusEl = document.getElementById('job-status');
+        // Set card color based on status
         let statusClass = '';
         switch (job.status) {
             case 'RUNNING':
-                statusClass = 'badge bg-info';
+                statusClass = 'job-running';
                 break;
             case 'COMPLETED':
-                statusClass = 'badge bg-success';
+                statusClass = 'job-completed';
                 break;
             case 'FAILED':
-                statusClass = 'badge bg-danger';
+                statusClass = 'job-failed';
                 break;
             default:
-                statusClass = 'badge bg-secondary';
+                statusClass = 'job-pending';
         }
-        statusEl.innerHTML = `<span class="${statusClass}">${job.status}</span>`;
+        card.classList.add(statusClass);
 
-        // Set video info
-        document.getElementById('job-video').textContent = job.videoKey || 'Unknown';
+        // Format the job ID to be shorter
+        const shortJobId = job.jobId.substring(0, 8) + '...';
 
-        // Set start time
-        document.getElementById('job-start-time').textContent =
-            job.startTime ? new Date(job.startTime).toLocaleString() : 'Unknown';
+        // Format the video key to get just the filename
+        const videoName = job.videoKey.split('/').pop() || 'Unknown Video';
 
-        // Display streaming info if available
-        const streamingContainer = document.getElementById('streaming-info-container');
-        const streamingInfo = document.getElementById('streaming-info');
+        // Format the date
+        const startDate = new Date(job.startTime).toLocaleString();
 
-        if (job.streaming) {
-            streamingContainer.classList.remove('d-none');
-            let html = `
-            <div class="card">
-                <div class="card-body">
-                    <h6 class="card-title">Available Streams</h6>
-                    <p><strong>Master Playlist:</strong> <a href="${job.streaming.masterPlaylist}" target="_blank">${job.streaming.masterPlaylist}</a></p>
-                    <p><strong>Resolutions:</strong></p>
-                    <ul>
-            `;
-
-            for (const [resolution, url] of Object.entries(job.streaming.resolutions)) {
-                html += `<li>${resolution}: <a href="${url}" target="_blank">${url}</a></li>`;
-            }
-
-            html += `
-                    </ul>
-                    <p class="mt-3">
-                        <a href="/player.html?url=${encodeURIComponent(job.streaming.masterPlaylist)}" class="btn btn-success" target="_blank">
-                            Watch Video
-                        </a>
-                    </p>
-                </div>
+        // Create card header
+        const header = document.createElement('div');
+        header.className = 'job-header';
+        header.innerHTML = `
+            <h3>${videoName}</h3>
+            <div class="job-meta">
+                <span class="job-id">ID: ${shortJobId}</span>
+                <span class="job-date">Started: ${startDate}</span>
+                <span class="job-status">Status: ${job.status}</span>
             </div>
-            `;
-
-            streamingInfo.innerHTML = html;
-        } else {
-            streamingContainer.classList.add('d-none');
-        }
-
-        // Display logs
-        const logsEl = document.getElementById('job-logs');
-        let logsHtml = '';
-
-        if (job.logs && job.logs.length > 0) {
-            job.logs.forEach(log => {
-                let timestamp = log.timestamp;
-                try {
-                    timestamp = new Date(log.timestamp).toLocaleTimeString();
-                } catch (e) { }
-
-                logsHtml += `<div>[${timestamp}] ${log.message}</div>`;
-            });
-        } else {
-            logsHtml = '<div class="text-warning">No logs available yet.</div>';
-        }
-
-        logsEl.innerHTML = logsHtml;
-
-        // Auto-scroll to bottom of logs
-        logsEl.scrollTop = logsEl.scrollHeight;
-    }
-
-    // Show an error message
-    showError(message) {
-        const alertEl = document.createElement('div');
-        alertEl.className = 'alert alert-danger alert-dismissible fade show';
-        alertEl.setAttribute('role', 'alert');
-        alertEl.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         `;
 
-        const container = document.querySelector('.container');
-        container.insertBefore(alertEl, container.firstChild);
+        // Create logs container
+        const logsContainer = document.createElement('div');
+        logsContainer.className = 'job-logs';
+        logsContainer.id = `logs-${job.jobId}`;
+        logsContainer.innerHTML = '<p>Loading logs...</p>';
+
+        // Add streaming section for completed jobs
+        let streamingSection = '';
+        if (job.streaming) {
+            streamingSection = document.createElement('div');
+            streamingSection.className = 'job-streaming';
+            streamingSection.innerHTML = `
+                <h4>Streaming URLs</h4>
+                <a href="${job.streaming.masterPlaylist}" target="_blank" class="streaming-link">Master Playlist</a>
+            `;
+
+            // Add resolution-specific links if available
+            if (job.streaming.resolutions) {
+                const resolutionsList = document.createElement('ul');
+                resolutionsList.className = 'resolutions-list';
+
+                Object.entries(job.streaming.resolutions).forEach(([resolution, url]) => {
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = `<a href="${url}" target="_blank">${resolution}</a>`;
+                    resolutionsList.appendChild(listItem);
+                });
+
+                streamingSection.appendChild(resolutionsList);
+            }
+        }
+
+        // Assemble the card
+        card.appendChild(header);
+        card.appendChild(logsContainer);
+        if (streamingSection) {
+            card.appendChild(streamingSection);
+        }
+
+        return card;
     }
 
-    // Start transcoding job
-    async startTranscoding(videoKey, performanceLevel = 'standard') {
-        try {
-            const port = window.apiPort || 3001;
-            const response = await fetch(`http://localhost:${port}/api/start-transcoding`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoKey, performanceLevel })
-            });
+    updateJobCard(jobId, jobDetails) {
+        const logsContainer = document.getElementById(`logs-${jobId}`);
+        if (!logsContainer) return;
 
-            if (!response.ok) {
-                throw new Error(`Failed to start transcoding: ${response.status}`);
+        // Update status class
+        const card = document.getElementById(`job-${jobId}`);
+        if (card) {
+            // Remove old status classes
+            card.classList.remove('job-pending', 'job-running', 'job-completed', 'job-failed');
+
+            // Add new status class
+            let statusClass = '';
+            switch (jobDetails.status) {
+                case 'RUNNING':
+                    statusClass = 'job-running';
+                    break;
+                case 'COMPLETED':
+                    statusClass = 'job-completed';
+                    break;
+                case 'FAILED':
+                    statusClass = 'job-failed';
+                    break;
+                default:
+                    statusClass = 'job-pending';
             }
+            card.classList.add(statusClass);
 
-            const result = await response.json();
-            console.log('Transcoding started:', result);
-
-            // Start polling for job updates
-            this.startPolling();
-
-            // Show job details right away
-            setTimeout(() => {
-                this.showJobDetailsModal(result.jobId);
-            }, 1000);
-
-            return result;
-        } catch (error) {
-            console.error('Error starting transcoding:', error);
-            this.showError(`Failed to start transcoding: ${error.message}`);
-            return null;
+            // Update the status text
+            const statusElement = card.querySelector('.job-status');
+            if (statusElement) {
+                statusElement.textContent = `Status: ${jobDetails.status}`;
+            }
         }
+
+        // Format and display logs
+        if (jobDetails.logs && jobDetails.logs.length > 0) {
+            const logsHtml = jobDetails.logs.map(log => {
+                const time = new Date(log.timestamp).toLocaleTimeString();
+                return `<div class="log-entry"><span class="log-time">${time}</span> ${log.message}</div>`;
+            }).join('');
+
+            logsContainer.innerHTML = logsHtml;
+
+            // Scroll to bottom to show latest logs
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        } else {
+            logsContainer.innerHTML = '<p>No logs available yet.</p>';
+        }
+
+        // Add streaming section if it's not already there and the job is completed
+        if (jobDetails.streaming && jobDetails.status === 'COMPLETED') {
+            let streamingSection = card.querySelector('.job-streaming');
+
+            // If streaming section doesn't exist, create it
+            if (!streamingSection) {
+                streamingSection = document.createElement('div');
+                streamingSection.className = 'job-streaming';
+                streamingSection.innerHTML = `
+                    <h4>Streaming URLs</h4>
+                    <a href="${jobDetails.streaming.masterPlaylist}" target="_blank" class="streaming-link">Master Playlist</a>
+                `;
+
+                // Add resolution-specific links
+                if (jobDetails.streaming.resolutions) {
+                    const resolutionsList = document.createElement('ul');
+                    resolutionsList.className = 'resolutions-list';
+
+                    Object.entries(jobDetails.streaming.resolutions).forEach(([resolution, url]) => {
+                        const listItem = document.createElement('li');
+                        listItem.innerHTML = `<a href="${url}" target="_blank">${resolution}</a>`;
+                        resolutionsList.appendChild(listItem);
+                    });
+
+                    streamingSection.appendChild(resolutionsList);
+                }
+
+                card.appendChild(streamingSection);
+            }
+        }
+    }
+
+    // Call this when the page is being unloaded
+    cleanup() {
+        this.stopPolling();
     }
 }
 
-// Initialize the global job manager
-window.jobManager = new JobManager(); 
+// Initialize the job manager when the page loads
+window.addEventListener('load', () => {
+    window.jobManager = new JobManager();
+});
+
+// Clean up when leaving the page
+window.addEventListener('beforeunload', () => {
+    if (window.jobManager) {
+        window.jobManager.cleanup();
+    }
+}); 

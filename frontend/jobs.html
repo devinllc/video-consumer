@@ -4,85 +4,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transcoding Jobs - Video Processing System</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/assets/css/styles.css">
+    <title>Video Jobs - Transcoding Dashboard</title>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="/">Video Processing System</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/config.html">Configuration</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/upload.html">Upload</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/jobs.html">Jobs</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/player.html">Player</a>
-                    </li>
+    <header>
+        <div class="header-content">
+            <h1>Video Transcoder</h1>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="config.html">Configuration</a></li>
+                    <li><a href="jobs.html" class="active">Jobs</a></li>
+                    <li><a href="upload.html">Upload</a></li>
                 </ul>
-            </div>
+            </nav>
         </div>
-    </nav>
+    </header>
 
-    <div class="container mt-4">
-        <h1>Transcoding Jobs</h1>
-
-        <div class="card mt-4">
-            <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Active Jobs</h5>
-                    <button id="refresh-jobs" class="btn btn-sm btn-outline-primary">Refresh</button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover">
-                        <thead>
-                            <tr>
-                                <th>Job ID</th>
-                                <th>Video</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="jobs-list">
-                            <tr>
-                                <td colspan="4" class="text-center">Loading jobs...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+    <div class="container">
+        <div class="page-header">
+            <h2>Active Jobs</h2>
+            <button id="refresh-jobs-btn" class="btn btn-primary">Refresh Jobs</button>
+            <button id="import-jobs-btn" class="btn btn-secondary">Import Jobs from AWS</button>
         </div>
+
+        <div id="no-jobs-message">
+            <h3>No active transcoding jobs found</h3>
+            <p>Upload a video and start transcoding to see jobs here.</p>
+            <a href="upload.html" class="btn btn-primary">Upload Video</a>
+        </div>
+
+        <div id="jobs-container"></div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/js/job-manager.js"></script>
+    <script src="js/job-manager.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            // Start job polling when the page loads
-            window.jobManager.startPolling();
+        // Add event listener for refresh button
+        document.getElementById('refresh-jobs-btn').addEventListener('click', () => {
+            if (window.jobManager) {
+                window.jobManager.fetchJobs();
+            }
+        });
 
-            // Set up refresh button
-            const refreshButton = document.getElementById('refresh-jobs');
-            if (refreshButton) {
-                refreshButton.addEventListener('click', () => {
-                    window.jobManager.fetchJobs();
+        // Add event listener for import button
+        document.getElementById('import-jobs-btn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/import-jobs', {
+                    method: 'POST'
                 });
+                const result = await response.json();
+                alert(`Imported ${result.activeJobs} jobs from AWS`);
+
+                // Refresh the jobs list
+                if (window.jobManager) {
+                    window.jobManager.fetchJobs();
+                }
+            } catch (error) {
+                console.error('Error importing jobs:', error);
+                alert('Failed to import jobs from AWS');
             }
         });
     </script>

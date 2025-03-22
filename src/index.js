@@ -200,6 +200,205 @@ app.post('/api/test-connection', async (req, res) => {
 // Track active jobs
 const activeJobs = new Map();
 
+// Set up multer for file uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const uniqueFilename = uuidv4() + path.extname(file.originalname);
+        cb(null, uniqueFilename);
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 1024 * 1024 * 1000, // 1000 MB limit
+    },
+    fileFilter: function (req, file, cb) {
+        // Accept video files only
+        if (!file.mimetype.startsWith('video/')) {
+            return cb(new Error('Only video files are allowed!'), false);
+        }
+        cb(null, true);
+    }
+});
+
+// API endpoint for file upload
+app.post('/api/upload', upload.single('video'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        if (!config) {
+            return res.status(400).json({ error: 'System not configured' });
+        }
+
+        console.log('Uploaded file:', req.file.originalname);
+        console.log('Stored as:', req.file.filename);
+        console.log('Size:', req.file.size, 'bytes');
+
+        // Create an S3 client
+        const s3Client = new S3Client({
+            region: config.AWS_REGION,
+            credentials: {
+                accessKeyId: config.AWS_ACCESS_KEY_ID,
+                secretAccessKey: config.AWS_SECRET_ACCESS_KEY
+            }
+        });
+
+        // Read the file from the local filesystem
+        const fileContent = fs.readFileSync(req.file.path);
+
+        // Upload the file to S3
+        const key = `uploads/${req.file.filename}`;
+        const command = new PutObjectCommand({
+            Bucket: config.S3_BUCKET_NAME,
+            Key: key,
+            Body: fileContent,
+            ContentType: req.file.mimetype
+        });
+
+        try {
+            await s3Client.send(command);
+            console.log('File uploaded to S3:', key);
+
+            // Return the file key and other details
+            res.json({
+                message: 'File uploaded successfully',
+                key,
+                originalName: req.file.originalname,
+                size: req.file.size,
+                location: `s3://${config.S3_BUCKET_NAME}/${key}`
+            });
+
+            // Clean up local file
+            fs.unlinkSync(req.file.path);
+
+        } catch (uploadError) {
+            console.error('Error uploading to S3:', uploadError);
+            res.status(500).json({ error: 'Failed to upload to S3', details: uploadError.message });
+        }
+    } catch (error) {
+        console.error('Error processing upload:', error);
+        res.status(500).json({ error: 'Upload failed', details: error.message });
+    }
+});
+
+// API endpoint for starting transcoding
+app.post('/api/start-transcoding', async (req, res) => {
+    try {
+        const { videoKey, performanceLevel } = req.body;
+
+        if (!videoKey) {
+            return res.status(400).json({ error: 'Missing videoKey parameter' });
+        }
+
+        if (!config) {
+            return res.status(400).json({ error: 'System not configured' });
+        }
+
+        // Generate a unique job ID
+        const jobId = uuidv4();
+
+        // Record the job start time
+        const startTime = new Date().toISOString();
+
+        // Create a new job entry
+        activeJobs.set(jobId, {
+            jobId,
+            videoKey,
+            status: 'PENDING',
+            startTime,
+            logs: [
+                {
+                    timestamp: startTime,
+                    message: `Job created. Video key: ${videoKey}`
+                }
+            ]
+        });
+
+        // Log the job creation
+        console.log(`Created new transcoding job ${jobId} for video ${videoKey}`);
+
+        // Return immediately with job ID
+        res.json({
+            success: true,
+            jobId,
+            message: 'Transcoding job started'
+        });
+
+        // Update job status to simulate task progress
+        simulateTranscodingTask(jobId, videoKey, performanceLevel);
+
+    } catch (error) {
+        console.error('Error starting transcoding:', error);
+        res.status(500).json({ error: 'Failed to start transcoding', details: error.message });
+    }
+});
+
+// Function to simulate a transcoding task
+function simulateTranscodingTask(jobId, videoKey, performanceLevel = 'standard') {
+    const job = activeJobs.get(jobId);
+    if (!job) return;
+
+    // Update job status
+    job.status = 'RUNNING';
+    job.logs.push({
+        timestamp: new Date().toISOString(),
+        message: 'Task status changed to RUNNING'
+    });
+
+    // Determine duration based on performance level
+    let duration = 60000; // Default 60 seconds for standard
+    if (performanceLevel === 'economy') {
+        duration = 90000; // 90 seconds for economy
+    } else if (performanceLevel === 'premium') {
+        duration = 30000; // 30 seconds for premium
+    }
+
+    // Add some simulated logs
+    setTimeout(() => {
+        job.logs.push({
+            timestamp: new Date().toISOString(),
+            message: `[Container] Downloaded original video successfully from S3: ${videoKey}`
+        });
+    }, 5000);
+
+    setTimeout(() => {
+        job.logs.push({
+            timestamp: new Date().toISOString(),
+            message: `[Container] Starting transcoding process with ffmpeg...`
+        });
+    }, 10000);
+
+    // Add progress updates
+    const intervals = [0.2, 0.4, 0.6, 0.8];
+    intervals.forEach((interval, index) => {
+        setTimeout(() => {
+            job.logs.push({
+                timestamp: new Date().toISOString(),
+                message: `[Container] Transcoding progress: ${Math.round(interval * 100)}%`
+            });
+        }, duration * interval);
+    });
+
+    // Complete the job after the duration
+    setTimeout(() => {
+        job.status = 'COMPLETED';
+        job.logs.push({
+            timestamp: new Date().toISOString(),
+            message: 'Task status changed to COMPLETED'
+        });
+        job.logs.push({
+            timestamp: new Date().toISOString(),
+            message: `[Container] Transcoding completed. Generated HLS files for video: ${videoKey}`
+        });
+    }, duration);
+}
+
 // API endpoint to get job status and logs
 app.get('/api/jobs/:jobId', (req, res) => {
     const { jobId } = req.params;

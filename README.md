@@ -440,3 +440,137 @@ If you're having trouble saving your AWS configuration through the web interface
    ```
 
 4. After restarting, clear your browser cache (Ctrl+F5) and try again 
+
+# Video Processing System
+
+A complete video processing system that allows you to upload, transcode, and stream videos using AWS resources.
+
+## Features
+
+- 🎥 Upload videos to your S3 bucket
+- 🔄 Transcode videos to multiple formats and resolutions
+- 📱 Stream videos with adaptive bitrate HLS
+- 📊 Monitor transcoding jobs and view logs
+- ⚙️ Simple AWS configuration management
+- 🔌 Built-in handling for EC2 IP changes
+
+## Quick Start
+
+### Option 1: Automatic Setup (Recommended)
+
+1. SSH into your EC2 instance:
+   ```
+   ssh ec2-user@your-ec2-ip
+   ```
+
+2. Clone the repository and run the setup script:
+   ```
+   git clone https://github.com/devinllc/video-consumer.git
+   cd video-consumer
+   chmod +x setup.sh
+   ./setup.sh
+   ```
+
+3. The setup script will:
+   - Install all necessary dependencies
+   - Configure Nginx to serve the frontend
+   - Set up the backend as a systemd service
+   - Configure your system to handle IP address changes
+   - Start all services
+
+### Option 2: Manual Setup
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/devinllc/video-consumer.git
+   cd video-consumer
+   ```
+
+2. Install dependencies:
+   ```
+   npm install
+   ```
+
+3. Build the application:
+   ```
+   npm run build
+   ```
+
+4. Start the development server:
+   ```
+   npm run dev
+   ```
+
+## Handling EC2 IP Address Changes
+
+This system is designed to handle EC2 IP address changes automatically:
+
+1. The frontend detects the server's current IP address and adjusts API calls accordingly
+2. When your EC2 instance stops and starts (which changes its public IP), no configuration changes are needed
+3. Users can access the system using the current public IP address
+
+## AWS Configuration
+
+To use the video processing features, you need to configure your AWS settings:
+
+1. Navigate to the Configuration page at `http://your-ec2-ip/config.html`
+2. Enter your AWS Region, Access Key, and Secret Key
+3. Configure your S3 bucket details
+4. Set up your ECS cluster information (if using ECS for transcoding)
+5. Test the connection to verify your settings
+
+## Directory Structure
+
+- `/frontend-app` - The main frontend application
+- `/frontend` - Legacy frontend files (for reference)
+- `/src` - Backend source code
+- `/dist` - Compiled backend code
+- `/public` - Static files served by the backend
+
+## Development
+
+To start the development server:
+
+```
+npm run dev
+```
+
+To build for production:
+
+```
+npm run build
+```
+
+## Accessing the Application
+
+After setup, you can access the application at:
+
+```
+http://your-ec2-ip
+```
+
+The application will automatically adjust to IP changes when your EC2 instance restarts.
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. Check the backend logs:
+   ```
+   sudo journalctl -u video-processor -f
+   ```
+
+2. Check the Nginx logs:
+   ```
+   sudo tail -f /var/log/nginx/error.log
+   ```
+
+3. Restart the services:
+   ```
+   sudo systemctl restart video-processor
+   sudo systemctl restart nginx
+   ```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 

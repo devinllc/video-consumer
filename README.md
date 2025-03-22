@@ -1,3 +1,31 @@
+# CRITICAL FIX FOR CONFIG.HTML LOCALHOST ERROR
+
+If you're still getting the `net::ERR_CONNECTION_REFUSED` error when trying to test/save configuration:
+
+```bash
+# 1. Connect to your EC2 instance
+ssh -i your-key.pem ec2-user@13.235.75.73
+
+# 2. Pull the latest changes (force overwrite any local changes)
+cd ~/video-consumer
+git fetch origin
+git reset --hard origin/main
+
+# 3. Rebuild and restart
+npm run build
+pm2 restart video-backend
+
+# 4. Clear your browser cache completely
+# In Chrome: Ctrl+Shift+Del → Select "Cached images and files" → Clear data
+
+# 5. Access the configuration page with a forced refresh
+# Press Ctrl+F5 when visiting: http://13.235.75.73:3001/config.html
+```
+
+This fix addresses a hardcoded API URL in the config.html page that was incorrectly using localhost:3001 instead of the proper API_BASE_URL from env.js.
+
+---
+
 # Understanding Your Frontends
 
 ## Which Frontend is Accessible on EC2?

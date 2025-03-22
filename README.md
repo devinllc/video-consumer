@@ -81,260 +81,255 @@ The project supports multiple deployment strategies:
 - Fargate Spot instances for lower costs
 - Automatic shutdown options to minimize expenses
 
-## Complete Deployment Guides
+## Complete Deployment Guide
 
-### Option 1: Same-Server Deployment (Frontend and Backend on Same EC2)
+### Option 1: Single Server Deployment (Frontend and Backend on Same EC2)
 
-This is the simplest deployment option, with both frontend and backend running on the same EC2 instance.
+This is the simplest option and eliminates CORS issues completely.
 
-#### Prerequisites
-- AWS Account (Free Tier eligible)
-- Domain name (optional)
+1. **Launch an EC2 Instance**
+   - Use Amazon Linux 2023 (Free Tier eligible)
+   - t2.micro instance type
+   - Allow ports 22 (SSH) and 3001 (Application) in the security group
+   - Create or use an existing key pair for SSH access
 
-#### Step 1: Launch an EC2 Instance
-1. Login to AWS Console and navigate to EC2
-2. Click "Launch Instance"
-3. Choose "Amazon Linux 2023" AMI
-4. Select t2.micro instance type (Free Tier eligible)
-5. Configure security group to allow inbound traffic on ports:
-   - 22 (SSH)
-   - 80 (HTTP)
-   - 3001 (Application port)
-6. Create or select an existing key pair
-7. Launch the instance and wait for it to start
-
-#### Step 2: Connect to Your EC2 Instance
-```bash
-ssh -i your-key.pem ec2-user@your-ec2-ip
-```
-
-#### Step 3: Install Required Software
-```bash
-# Update system packages
-sudo yum update -y
-
-# Install Node.js
-curl -sL https://rpm.nodesource.com/setup_18.x | sudo bash -
-sudo yum install -y nodejs git
-
-# Install PM2 for process management
-sudo npm install -g pm2
-
-# Verify installations
-node -v
-npm -v
-pm2 -v
-```
-
-#### Step 4: Clone the Repository
-```bash
-git clone https://github.com/devinllc/video-consumer.git
-cd video-consumer
-npm install
-```
-
-#### Step 5: Configure for Same-Server Deployment
-1. Create or update the environment file:
-```bash
-# Edit frontend configuration
-nano frontend-app/env.js
-```
-
-2. Set API_BASE_URL to empty string for same-origin deployment:
-```javascript
-// Environment configuration for video-consumer app
-// For same-origin requests (frontend and backend on same server)
-const API_BASE_URL = '';  // Empty string means use the same origin
-```
-
-3. Save and exit (Ctrl+O, Enter, Ctrl+X)
-
-#### Step 6: Start the Application
-```bash
-# Start the application with PM2
-pm2 start src/index.js --name video-backend
-
-# Make sure PM2 starts on system boot
-pm2 startup
-sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user
-pm2 save
-```
-
-#### Step 7: Access Your Application
-1. Open your browser and navigate to `http://your-ec2-ip:3001`
-2. Configure AWS credentials at `http://your-ec2-ip:3001/config.html`
-
-#### Step 8: Set Environment Variable for CORS (if needed)
-```bash
-# Edit the PM2 environment
-pm2 stop video-backend
-pm2 delete video-backend
-ALLOW_ALL_ORIGINS=true pm2 start src/index.js --name video-backend
-pm2 save
-```
-
-### Option 2: Separate Deployment (Frontend on Vercel, Backend on EC2)
-
-This option deploys the frontend on Vercel and the backend on EC2.
-
-#### Prerequisites
-- AWS Account (Free Tier eligible)
-- Vercel account
-- GitHub account
-
-#### Part A: Deploy Backend on EC2
-
-#### Step 1: Launch an EC2 Instance
-1. Login to AWS Console and navigate to EC2
-2. Click "Launch Instance"
-3. Choose "Amazon Linux 2023" AMI
-4. Select t2.micro instance type (Free Tier eligible)
-5. Configure security group to allow inbound traffic on ports:
-   - 22 (SSH)
-   - 3001 (API port)
-6. Create or select an existing key pair
-7. Launch the instance and wait for it to start
-
-#### Step 2: Connect to Your EC2 Instance
-```bash
-ssh -i your-key.pem ec2-user@your-ec2-ip
-```
-
-#### Step 3: Install Required Software
-```bash
-# Update system packages
-sudo yum update -y
-
-# Install Node.js
-curl -sL https://rpm.nodesource.com/setup_18.x | sudo bash -
-sudo yum install -y nodejs git
-
-# Install PM2 for process management
-sudo npm install -g pm2
-
-# Verify installations
-node -v
-npm -v
-pm2 -v
-```
-
-#### Step 4: Clone the Repository
-```bash
-git clone https://github.com/devinllc/video-consumer.git
-cd video-consumer
-npm install
-```
-
-#### Step 5: Configure CORS for Separate Deployment
-1. Edit the backend server file:
-```bash
-nano src/index.js
-```
-
-2. Update the CORS configuration to allow your Vercel frontend:
-```javascript
-// Add your Vercel URL to allowed origins
-if (process.env.FRONTEND_URL) {
-    allowedOrigins.push(process.env.FRONTEND_URL);
-}
-
-// Add Vercel domains
-allowedOrigins.push('https://video-consumer.vercel.app');
-allowedOrigins.push('https://video-consumer-git-main-trisha233.vercel.app');
-```
-
-3. Save and exit (Ctrl+O, Enter, Ctrl+X)
-
-#### Step 6: Start the Backend Server with Environment Variables
-```bash
-# Set environment variables and start the application
-FRONTEND_URL=https://your-vercel-app.vercel.app EC2_PUBLIC_IP=your-ec2-ip pm2 start src/index.js --name video-backend
-
-# Make sure PM2 starts on system boot
-pm2 startup
-sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user
-pm2 save
-```
-
-#### Part B: Deploy Frontend on Vercel
-
-#### Step 1: Update Frontend Configuration
-1. Update the API URL in your repository:
-```bash
-# On your local machine
-git clone https://github.com/devinllc/video-consumer.git
-cd video-consumer
-```
-
-2. Edit the environment file:
-```bash
-nano frontend-app/env.js
-```
-
-3. Update the API_BASE_URL to point to your EC2 instance:
-```javascript
-// Environment configuration for video-consumer app
-const API_BASE_URL = 'http://your-ec2-ip:3001';  // Replace with your EC2 IP
-```
-
-4. Commit and push changes:
-```bash
-git add frontend-app/env.js
-git commit -m "Update API URL for EC2 backend"
-git push origin main
-```
-
-#### Step 2: Deploy to Vercel
-1. Login to Vercel and import your GitHub repository
-2. Configure the project:
-   - Root Directory: `frontend-app`
-   - Build Command: (leave empty)
-   - Output Directory: (leave empty)
-3. Click Deploy
-4. Once deployed, access your frontend at the Vercel URL
-
-### Troubleshooting Common Issues
-
-#### 1. API Connection Errors (`ERR_CONNECTION_REFUSED`)
-If you see "Failed to load resource: net::ERR_CONNECTION_REFUSED" errors:
-
-1. **Check API URL Configuration**: 
-   - For same-server deployment: API_BASE_URL should be empty string (`''`)
-   - For separate deployment: API_BASE_URL should be full EC2 URL (`http://your-ec2-ip:3001`)
-
-2. **Verify the EC2 Security Group**:
-   - Port 3001 must be open for inbound traffic
-   - For same-origin deployment, both frontend and backend use the same port
-
-3. **Check Server Logs**:
+2. **Connect to Your EC2 Instance**
    ```bash
-   pm2 logs video-backend
+   ssh -i your-key-file.pem ec2-user@your-ec2-ip
    ```
 
-#### 2. CORS Errors
-If you see "Access to fetch at 'http://...' from origin 'http://...' has been blocked by CORS policy":
-
-1. **Set ALLOW_ALL_ORIGINS Environment Variable**:
+3. **Install Required Software**
    ```bash
-   pm2 stop video-backend
-   pm2 delete video-backend
-   ALLOW_ALL_ORIGINS=true pm2 start src/index.js --name video-backend
+   # Update the system
+   sudo dnf update -y
+
+   # Install Git
+   sudo dnf install -y git
+
+   # Install Node.js
+   curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo -E bash -
+   sudo dnf install -y nodejs
+
+   # Install PM2 for process management
+   sudo npm install -g pm2
+   ```
+
+4. **Clone the Repository**
+   ```bash
+   git clone https://github.com/devinllc/video-consumer.git
+   cd video-consumer
+   ```
+
+5. **Install Dependencies**
+   ```bash
+   npm install
+   ```
+
+6. **Configure the API URL for Same-Origin Deployment**
+   ```bash
+   # The env.js file should already be configured correctly with empty API_BASE_URL
+   # Verify the content
+   cat frontend-app/env.js
+   
+   # Make sure it contains: const API_BASE_URL = '';
+   ```
+
+7. **Start the Application with PM2**
+   ```bash
+   pm2 start src/index.js --name video-backend
+   
+   # Configure PM2 to start on boot
+   pm2 startup
+   # Run the command displayed in the output
    pm2 save
    ```
 
-2. **Add Your Domain to Allowed Origins**:
+8. **Access Your Application**
+   - Open your browser and go to `http://your-ec2-ip:3001`
+   - To configure the application, open `http://your-ec2-ip:3001/config.html`
+   - Enter your AWS credentials and S3 bucket information
+
+### Option 2: Separate Deployment (Frontend on Vercel, Backend on EC2)
+
+With this setup, your frontend and backend run on different servers.
+
+1. **Launch and Configure an EC2 Instance for Backend Only**
+   - Follow steps 1-5 from Option 1 above
+   - Modify CORS settings in `src/index.js` to explicitly allow your Vercel domain:
+      ```bash
+      # Edit the CORS configuration
+      nano src/index.js
+      
+      # Find the CORS configuration and add your Vercel domain:
+      # app.use(cors({
+      #   origin: ['https://your-vercel-app.vercel.app'],
+      #   methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      #   allowedHeaders: ['Content-Type', 'Authorization'],
+      #   credentials: true
+      # }));
+      ```
+
+2. **Start the Backend Server**
    ```bash
-   FRONTEND_URL=https://your-domain.com pm2 start src/index.js --name video-backend
+   pm2 start src/index.js --name video-backend
+   pm2 startup
+   # Run the command displayed in the output
+   pm2 save
    ```
 
-#### 3. Mixed Content Errors (HTTPS frontend to HTTP backend)
-If your Vercel frontend (HTTPS) cannot access your EC2 backend (HTTP):
+3. **Configure the Frontend**
+   - Edit the `frontend-app/env.js` file in your local repository:
+     ```javascript
+     // Update with your EC2 instance's public IP or domain
+     const API_BASE_URL = 'http://your-ec2-ip:3001';
+     
+     // Uncomment and use the line below if you set up HTTPS
+     // const API_BASE_URL = 'https://your-domain-or-ip:3001';
+     ```
 
-1. **Use a Secure Proxy**:
-   - Consider setting up Nginx with Let's Encrypt
-   - Or use a service like Cloudflare or ngrok
+4. **Deploy the Frontend to Vercel**
+   - Push your changes to GitHub
+   - Connect your GitHub repository to Vercel
+   - Set the root directory to `frontend-app`
+   - Deploy the application
 
-2. **For Testing Only**: Enable insecure requests in your browser
+5. **Configure Vercel Settings**
+   - Set the output directory to `.`
+   - Use "SPA" for single page application routing
+
+### Troubleshooting Deployments
+
+If you encounter issues with your deployment, check the following:
+
+1. **CORS Errors**:
+   - For same-origin deployments: You shouldn't see CORS errors
+   - For separate deployments: Make sure your EC2 instance's CORS settings include your Vercel app's domain
+   
+2. **Connection Refused Errors**:
+   - Ensure your EC2 security group allows traffic on port 3001
+   - Verify the backend server is running: `pm2 status`
+   - Check logs for errors: `pm2 logs video-backend`
+   
+3. **Frontend Can't Connect to Backend**:
+   - For same-origin: Ensure `API_BASE_URL` is set to an empty string in `env.js`
+   - For separate deployment: Verify the correct EC2 IP/domain is set in `env.js`
+   
+4. **AWS Credential Issues**:
+   - Verify that you've entered the correct AWS credentials in the config page
+   - Check that your S3 bucket exists and is accessible
+
+## Getting Started
+
+### Prerequisites
+- AWS Account
+- Docker and Docker Compose
+- Node.js and npm
+- AWS CLI configured with appropriate credentials
+
+### Local Development Setup
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/video-transcoding-service.git
+   cd video-transcoding-service
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+   ```bash
+   npm start
+   ```
+
+4. Access the application at http://localhost:3000
+
+### Docker Compose Setup
+
+For a quick local deployment with Docker:
+
+1. Build and start the containers:
+   ```bash
+   docker-compose up -d
+   ```
+
+2. Access the application at http://localhost:3000
+
+### AWS Deployment
+
+For deploying to AWS:
+
+1. Make the deployment scripts executable:
+   ```bash
+   chmod +x deploy.sh deploy-ecs.sh
+   ```
+
+2. Build and push Docker images to ECR:
+   ```bash
+   ./deploy.sh
+   ```
+
+3. Deploy to ECS:
+   ```bash
+   ./deploy-ecs.sh
+   ```
+
+## API Endpoints
+
+The backend provides the following API endpoints:
+
+- `POST /api/upload`: Upload a video file
+- `POST /api/transcode`: Start a transcoding job
+- `GET /api/jobs/:jobId`: Get job status and logs
+- `GET /api/jobs`: List all jobs
+- `POST /api/config`: Save AWS configuration
+- `GET /api/config`: Get current configuration
+- `POST /api/test-connection`: Test AWS connectivity
+
+## Configuration
+
+### AWS Resources Required
+
+1. **S3 Bucket**: For storing videos
+2. **IAM User/Role**: With permissions for S3, ECS, and ECR
+3. **ECS Cluster**: For running transcoding tasks
+4. **ECR Repositories**: For storing Docker images
+5. **VPC, Subnets, Security Groups**: For network configuration
+
+### Performance Tuning
+
+The service allows configuring different performance levels for transcoding:
+
+- **Economy**: 1 vCPU, 2GB RAM
+- **Standard**: 2 vCPU, 4GB RAM
+- **Premium**: 4 vCPU, 8GB RAM
+
+## Project Structure
+
+```
+video-transcoding-service/
+├── consumer/                # Frontend web interface
+│   ├── index.js           # Main transcoding code or services page
+│   ├── decker
+├── frontend/                # Frontend web interface
+│   ├── index.html           # Main application page
+│   ├── config.html          # Configuration page
+│   ├── instructions.html    # User instructions
+│   ├── config.js            # API configuration
+│   └── styles/              # CSS styles
+├── src/                     # Backend source code
+│   └── index.ts             # Main server file
+├── Dockerfile.frontend      # Frontend Docker image
+├── Dockerfile.backend       # Backend Docker image
+├── docker-compose.yml       # Local deployment config
+├── deploy.sh                # ECR deployment script
+├── deploy-ecs.sh            # ECS deployment script
+├── task-definition-frontend.json  # ECS task definition for frontend
+├── task-definition-backend.json   # ECS task definition for backend
+└── DEPLOYMENT-GUIDE.md      # Detailed deployment instructions
+```
 
 ## Cost Management
 

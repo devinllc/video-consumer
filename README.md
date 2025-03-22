@@ -23,6 +23,32 @@ pm2 restart video-backend
 
 After restarting, refresh the browser and you should be able to upload files.
 
+# NEW FILE UPLOAD ENDPOINT ADDED
+
+We've added the `/api/upload` endpoint for handling file uploads and `/api/start-transcode` for processing videos. To apply these updates:
+
+```bash
+# 1. Connect to your EC2 instance
+ssh -i your-key.pem ec2-user@13.235.75.73
+
+# 2. Pull the latest changes
+cd ~/video-consumer
+git pull origin main
+
+# 3. Create the uploads directory if it doesn't exist
+mkdir -p uploads
+
+# 4. Rebuild and restart
+npm run build
+pm2 restart video-backend
+```
+
+After restarting, you should be able to:
+1. Upload video files from the main page
+2. See the upload progress
+3. Start transcoding jobs
+4. Track job progress in real-time
+
 # CRITICAL FIX FOR CONFIG.HTML LOCALHOST ERROR
 
 If you're still getting the `net::ERR_CONNECTION_REFUSED` error when trying to test/save configuration:

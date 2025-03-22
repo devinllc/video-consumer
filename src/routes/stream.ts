@@ -8,13 +8,14 @@ const router = Router();
  * Stream a local video file with proper CORS and range headers
  * This endpoint supports HLS streaming of .m3u8 and .ts files
  */
-router.get('/:fileType/:fileName', (req: Request, res: Response) => {
+router.get('/:fileType/:fileName', (req: Request, res: Response): void => {
     const { fileType, fileName } = req.params;
     let filePath: string;
 
     // Validate file type for security
     if (fileType !== 'm3u8' && fileType !== 'ts') {
-        return res.status(400).json({ error: 'Invalid file type requested' });
+        res.status(400).json({ error: 'Invalid file type requested' });
+        return;
     }
 
     // Determine the file path based on the file type
@@ -27,7 +28,8 @@ router.get('/:fileType/:fileName', (req: Request, res: Response) => {
 
     // Check if file exists
     if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: 'File not found' });
+        res.status(404).json({ error: 'File not found' });
+        return;
     }
 
     const stat = fs.statSync(filePath);

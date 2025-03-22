@@ -580,3 +580,67 @@ To minimize costs:
 ---
 
 For more detailed troubleshooting or questions, please open an issue on GitHub.
+
+## Same-Origin Deployment (Frontend and Backend on Same EC2)
+
+If you're hosting both the frontend and backend on the same EC2 instance (as in your current setup), you can simplify the configuration:
+
+### Step 1: Update the Frontend API Configuration
+
+Since both components are on the same server, you should use relative URLs:
+
+1. Edit the `frontend-app/env.js` file:
+   ```bash
+   nano frontend-app/env.js
+   ```
+
+2. Update the API_BASE_URL to an empty string, which means "use the current origin":
+   ```javascript
+   // Environment configuration for video-consumer app
+   // For same-origin requests (frontend and backend on same server)
+   const API_BASE_URL = '';  // Empty string means use the same origin
+   ```
+
+3. Save the file (Ctrl+O, Enter, Ctrl+X)
+
+### Step 2: Verify Configuration in frontend-app/config.js
+
+The config.js file is already set up to handle this case, but you can verify it:
+
+1. Check the file:
+   ```bash
+   cat frontend-app/config.js
+   ```
+
+2. Confirm that the URL construction is using the API_BASE_URL correctly:
+   ```javascript
+   // Function to get the full API URL
+   window.getApiUrl = function (endpoint) {
+       return window.API_CONFIG.BASE_URL + endpoint;
+   };
+   ```
+
+### Step 3: Restart Your Application
+
+After making these changes, restart your application:
+
+```bash
+pm2 restart video-backend
+```
+
+### Step 4: Access Your Application
+
+You can now access your application using the EC2's IP address:
+
+```
+http://13.235.75.73:3001
+```
+
+This URL will serve both the frontend interface and the backend API endpoints.
+
+### Benefits of Same-Origin Deployment
+
+- **No CORS issues**: Since both frontend and backend are on the same origin
+- **Simplified configuration**: No need to update URLs when the EC2 IP changes
+- **Reduced latency**: Direct communication between frontend and backend
+- **Easier maintenance**: Only one server to manage

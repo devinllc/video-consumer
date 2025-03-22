@@ -338,7 +338,7 @@ interface TranscodingJob {
     startTime: Date;
     logStream?: string;
     logs?: { timestamp: string; message: string }[];
-    containerLogsAdded: boolean;
+    notifiedRunning?: boolean;
     performanceLevel: string;
 }
 
@@ -348,39 +348,6 @@ const activeJobs = new Map<string, TranscodingJob>();
 async function execCommand(command: string): Promise<string> {
     const { stdout } = await exec(command);
     return stdout?.toString() || '';
-}
-
-// Function to add simulated container logs for testing
-function addSimulatedContainerLogs(jobId: string) {
-    const job = activeJobs.get(jobId);
-    if (!job || !job.logs) return;
-
-    // Exact transcoding logs provided by the user
-    const sampleLogs = [
-        "Downloaded original video successfully.",
-        "> video-transcoder@1.0.0 start",
-        "> node index.js",
-        "Uploaded output/5a33d77c-6816-4c48-bf62-1ef61888a345/720p/segment_000.ts successfully.",
-        "Uploaded output/5a33d77c-6816-4c48-bf62-1ef61888a345/480p/index.m3u8 successfully.",
-        "Uploaded HLS files for 480p",
-        "Uploaded output/5a33d77c-6816-4c48-bf62-1ef61888a345/480p/segment_000.ts successfully.",
-        "Uploaded HLS files for 360p",
-        "Uploaded output/5a33d77c-6816-4c48-bf62-1ef61888a345/360p/segment_000.ts successfully.",
-        "Uploaded output/5a33d77c-6816-4c48-bf62-1ef61888a345/360p/index.m3u8 successfully."
-    ];
-
-    // Add logs with timestamps spaced out
-    let timestamp = new Date();
-
-    for (const logMessage of sampleLogs) {
-        // Add a random delay between logs (1-3 seconds)
-        timestamp = new Date(timestamp.getTime() + Math.floor(Math.random() * 3000) + 1000);
-
-        job.logs.push({
-            timestamp: timestamp.toISOString(),
-            message: `[Container] ${logMessage}`
-        });
-    }
 }
 
 // Function to monitor Docker container
@@ -585,32 +552,22 @@ async function monitorECSTask(jobId: string, taskArn: string) {
                 // Update job logs
                 job.logs = logs;
 
-                // If task is running for the first time, add simulated container logs
-                if (task.lastStatus === 'RUNNING' && !job.containerLogsAdded) {
-                    // Try to fetch CloudWatch logs (this might fail in development)
-                    try {
-                        // Add simulated container logs for testing
-                        addSimulatedContainerLogs(jobId);
-                        job.containerLogsAdded = true;
-                    } catch (error) {
-                        console.error('Error adding container logs:', error);
-                    }
-                }
-
                 if (task.lastStatus === 'STOPPED') {
-                    // Make sure we have container logs before marking as complete
-                    if (!job.containerLogsAdded) {
-                        addSimulatedContainerLogs(jobId);
-                        job.containerLogsAdded = true;
-                    }
-
                     if (task.stopCode === 'EssentialContainerExited') {
                         const container = task.containers?.[0];
                         if (container?.exitCode === 0) {
                             job.status = 'COMPLETED';
+                            job.logs.push({
+                                timestamp: new Date().toISOString(),
+                                message: 'Task completed successfully'
+                            });
                             console.log(`Job ${jobId} completed successfully`);
                         } else {
                             job.status = 'FAILED';
+                            job.logs.push({
+                                timestamp: new Date().toISOString(),
+                                message: `Task failed with exit code ${container?.exitCode}`
+                            });
                             console.log(`Job ${jobId} failed with exit code ${container?.exitCode}`);
 
                             // Add detailed failure information to logs
@@ -623,6 +580,10 @@ async function monitorECSTask(jobId: string, taskArn: string) {
                         }
                     } else {
                         job.status = 'FAILED';
+                        job.logs.push({
+                            timestamp: new Date().toISOString(),
+                            message: `Task failed with stop code ${task.stopCode}`
+                        });
                         console.log(`Job ${jobId} failed with stop code ${task.stopCode}`);
 
                         // Add detailed failure information to logs
@@ -636,6 +597,16 @@ async function monitorECSTask(jobId: string, taskArn: string) {
                 } else if (task.lastStatus === 'RUNNING' || task.lastStatus === 'PROVISIONING' || task.lastStatus === 'PENDING') {
                     // Continue monitoring for these states
                     job.status = 'RUNNING';
+
+                    // Add progress information for running tasks
+                    if (task.lastStatus === 'RUNNING' && !job.notifiedRunning) {
+                        job.logs.push({
+                            timestamp: new Date().toISOString(),
+                            message: 'Task is now running and processing your video'
+                        });
+                        job.notifiedRunning = true;
+                    }
+
                     // Check again in 10 seconds
                     setTimeout(() => monitorECSTask(jobId, taskArn), 10000);
                 } else {
@@ -666,12 +637,6 @@ async function monitorECSTask(jobId: string, taskArn: string) {
                     timestamp: new Date().toISOString(),
                     message: `Warning: Limited monitoring due to insufficient permissions (ecs:DescribeTasks). The task may still be running correctly.`
                 });
-
-                // Add simulated container logs if not added yet
-                if (!job.containerLogsAdded) {
-                    addSimulatedContainerLogs(jobId);
-                    job.containerLogsAdded = true;
-                }
 
                 // Keep the job in RUNNING state - assume it's still running
                 job.status = 'RUNNING';
@@ -763,37 +728,73 @@ app.post('/api/start-transcoding', async (req: Request, res: Response) => {
         const jobId = uuidv4();
         console.log(`Starting transcoding job ${jobId} for video: ${videoKey}, performance level: ${performanceLevel || 'standard'}`);
 
-        // Use the configured task definition from config, don't override it
-        const taskArn = await startECSTask(videoKey, jobId);
-
-        if (!taskArn) {
-            res.status(500).json({
-                success: false,
-                error: 'Failed to start transcoding task'
-            });
-            return;
-        }
-
-        // Add the job to the active jobs list
+        // Add the job to the active jobs list first with PENDING status
         activeJobs.set(jobId, {
             videoKey,
-            status: 'RUNNING',
-            taskArn,
+            status: 'PENDING',
             startTime: new Date(),
-            logs: [],
-            containerLogsAdded: false,
-            performanceLevel: performanceLevel || 'standard'
+            logs: [{
+                timestamp: new Date().toISOString(),
+                message: `Job created for video key: ${videoKey}`
+            }],
+            performanceLevel: performanceLevel || 'standard',
+            notifiedRunning: false
         });
 
-        // Start monitoring job progress
-        monitorECSTask(jobId, taskArn);
+        // Start the actual ECS task
+        try {
+            const taskArn = await startECSTask(videoKey, jobId);
 
-        res.json({
-            success: true,
-            jobId,
-            taskArn,
-            message: 'Transcoding started'
-        });
+            if (!taskArn) {
+                activeJobs.get(jobId)!.status = 'FAILED';
+                activeJobs.get(jobId)!.logs!.push({
+                    timestamp: new Date().toISOString(),
+                    message: 'Failed to start ECS task: No task ARN returned'
+                });
+
+                res.status(500).json({
+                    success: false,
+                    error: 'Failed to start transcoding task'
+                });
+                return;
+            }
+
+            // Update the job with the task ARN
+            const job = activeJobs.get(jobId)!;
+            job.taskArn = taskArn;
+            job.status = 'RUNNING';
+            job.logs!.push({
+                timestamp: new Date().toISOString(),
+                message: `Started ECS task: ${taskArn}`
+            });
+
+            // Start monitoring job progress
+            monitorECSTask(jobId, taskArn);
+
+            res.json({
+                success: true,
+                jobId,
+                taskArn,
+                message: 'Transcoding started successfully'
+            });
+        } catch (error: any) {
+            console.error('Error starting ECS task:', error);
+
+            // Update job status to FAILED
+            const job = activeJobs.get(jobId);
+            if (job) {
+                job.status = 'FAILED';
+                job.logs!.push({
+                    timestamp: new Date().toISOString(),
+                    message: `Failed to start ECS task: ${error.message}`
+                });
+            }
+
+            res.status(500).json({
+                success: false,
+                error: error.message || 'Failed to start transcoding task'
+            });
+        }
     } catch (error: any) {
         console.error('Error starting transcoding:', error);
         res.status(500).json({
@@ -1144,5 +1145,31 @@ function startServer(port: number) {
             console.log(`Server running on port ${port}`);
         });
 }
+
+// API endpoint to check if upload is ready
+app.get('/api/check-upload-ready', (_req: Request, res: Response) => {
+    try {
+        // Check if the configuration exists and is valid for uploads
+        if (!userConfig) {
+            res.json({ ready: false, message: 'System not configured' });
+            return;
+        }
+
+        // Check if S3 bucket name is available
+        if (!userConfig.S3_BUCKET_NAME) {
+            res.json({ ready: false, message: 'S3 bucket not configured' });
+            return;
+        }
+
+        res.json({
+            ready: true,
+            message: 'Upload service is ready',
+            bucket: userConfig.S3_BUCKET_NAME
+        });
+    } catch (error) {
+        console.error('Error checking upload readiness:', error);
+        res.status(500).json({ ready: false, error: 'Internal server error' });
+    }
+});
 
 startServer(PORT);

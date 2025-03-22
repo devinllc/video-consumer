@@ -1,7 +1,7 @@
 // API configuration
 window.API_CONFIG = {
-    // If API_BASE_URL is set in env.js, use that; otherwise fall back to default
-    BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : 'http://localhost:3001',
+    // If API_BASE_URL is set in env.js, use that; otherwise fall back to current origin
+    BASE_URL: typeof API_BASE_URL !== 'undefined' && API_BASE_URL !== '' ? API_BASE_URL : '',
     ENDPOINTS: {
         UPLOAD: '/api/upload',
         TRANSCODE: '/api/start-transcoding',
@@ -14,13 +14,18 @@ window.API_CONFIG = {
     }
 };
 
-// Function to get the full API URL
+// Function to get the full API URL (handles both relative and absolute URLs)
 window.getApiUrl = function (endpoint) {
+    // If BASE_URL is empty, it's a same-origin request
+    if (!window.API_CONFIG.BASE_URL) {
+        return endpoint;
+    }
+    // Otherwise, combine BASE_URL with endpoint
     return window.API_CONFIG.BASE_URL + endpoint;
 };
 
 // Log the configuration
-console.log('API Configuration loaded');
+console.log('API Configuration loaded', window.API_CONFIG.BASE_URL ? 'with base URL' : 'using same origin');
 
 // Default performance levels
 window.API_CONFIG.PERFORMANCE_LEVELS = {

@@ -75,6 +75,32 @@ pm2 restart video-backend
 
 Make sure your ECS task definition is properly configured with the necessary environment variables and container setup for processing videos.
 
+# FIXED TASK EXECUTION TO USE REAL AWS ECS TASKS
+
+We've removed all simulation code and now the application fully uses the actual AWS ECS tasks instead of simulating task execution. This ensures:
+
+1. Real AWS tasks are started with proper credentials and configuration
+2. The progress is monitored directly from AWS ECS API
+3. No simulated logs are added to the job - all logs come from the actual task
+4. Fixed proper error handling for real task execution
+
+To apply this fix:
+
+```bash
+# 1. Connect to your EC2 instance
+ssh -i your-key.pem ec2-user@13.235.75.73
+
+# 2. Pull the latest changes
+cd ~/video-consumer
+git pull origin main
+
+# 3. Rebuild and restart
+npm run build
+pm2 restart video-backend
+```
+
+After restarting, the server will connect to your actual AWS services for all operations with no simulation layer.
+
 # CRITICAL FIX FOR CONFIG.HTML LOCALHOST ERROR
 
 If you're still getting the `net::ERR_CONNECTION_REFUSED` error when trying to test/save configuration:

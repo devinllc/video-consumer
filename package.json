@@ -5,8 +5,8 @@
     "main": "dist/index.js",
     "scripts": {
         "start": "node dist/index.js",
-        "dev": "nodemon src/index.js",
-        "build": "mkdir -p dist && cp -r src/* dist/",
+        "dev": "nodemon --exec ts-node src/index.ts",
+        "build": "tsc && cp src/.env* dist/ 2>/dev/null || true && cp src/config.json dist/ 2>/dev/null || true",
         "tsc-check": "tsc --noEmit",
         "vercel-build": "echo 'Build step completed'"
     },
@@ -34,7 +34,8 @@
         "@types/multer": "^1.4.12",
         "@types/node": "^22.13.11",
         "@types/qs": "^6.9.18",
-        "nodemon": "^2.0.20",
+        "nodemon": "^2.0.22",
+        "ts-node": "^10.9.2",
         "typescript": "^5.8.2"
     },
     "engines": {

@@ -16,16 +16,16 @@ const app = express();
 
 // Enable CORS for all routes
 app.use(cors({
-    origin: true, // Allow all origins for EC2 deployment
+    origin: '*', // Allow all origins
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Parse JSON bodies
 app.use(express.json());
 
-app.use(express.static('frontend'));
+// Serve static files from frontend-app directory instead of frontend
+app.use(express.static('frontend-app'));
 
 // Ensure uploads directory exists (only in development)
 if (process.env.NODE_ENV !== 'production' && !fs.existsSync('uploads')) {
@@ -397,14 +397,14 @@ app.get('/api/jobs/:jobId', (req, res) => {
 
 // Get all active jobs
 app.get('/api/jobs', (_req, res) => {
-    const jobs = Array.from(activeJobs.entries()).map(([id, job]) => ({
-        jobId: id,
+    const jobs = Array.from(activeJobs.entries()).map(([jobId, job]) => ({
+        jobId,
         status: job.status,
         startTime: job.startTime,
         videoKey: job.videoKey
     }));
 
-    res.json({ jobs });
+    res.json(jobs);
 });
 
 // Test S3 connectivity only
@@ -875,14 +875,12 @@ async function getAwsAccountId() {
     }
 }
 
-// Add a health check endpoint for Vercel
-app.get('/health', (req, res) => {
-    res.status(200).json({
+// Health check endpoint
+app.get('/health', (_req, res) => {
+    res.json({
         status: 'ok',
-        environment: process.env.NODE_ENV || 'development',
-        serverless: process.env.VERCEL === '1' ? true : false,
         timestamp: new Date().toISOString(),
-        configured: config ? true : false
+        message: 'Video processing service is running'
     });
 });
 
@@ -1189,4 +1187,54 @@ function simulateTaskProgress(jobId) {
 module.exports = app;
 
 // Export the handler for serverless environments
-module.exports.handler = serverless(app); 
+module.exports.handler = serverless(app);
+
+// API endpoint to test connection (POST)
+app.post('/api/test-connection', async (req, res) => {
+    try {
+        // Use the config from the request body temporarily
+        const tempConfig = req.body;
+
+        if (!tempConfig || !tempConfig.AWS_REGION || !tempConfig.AWS_ACCESS_KEY_ID || !tempConfig.AWS_SECRET_ACCESS_KEY) {
+            return res.json({
+                success: false,
+                errors: ['Invalid configuration. Please provide AWS credentials.']
+            });
+        }
+
+        console.log('Testing connection with provided credentials...');
+        console.log('Region:', tempConfig.AWS_REGION);
+        console.log('Access Key ID:', tempConfig.AWS_ACCESS_KEY_ID);
+        console.log('S3 Bucket:', tempConfig.S3_BUCKET_NAME || 'Not provided');
+
+        // Test S3 connection with provided credentials
+        const s3Client = new S3Client({
+            region: tempConfig.AWS_REGION,
+            credentials: {
+                accessKeyId: tempConfig.AWS_ACCESS_KEY_ID,
+                secretAccessKey: tempConfig.AWS_SECRET_ACCESS_KEY,
+            }
+        });
+
+        try {
+            await s3Client.send(new ListBucketsCommand({}));
+
+            res.json({
+                success: true,
+                message: 'Successfully connected to AWS S3 with provided credentials'
+            });
+        } catch (error) {
+            console.error('Error testing S3 connection:', error);
+            res.json({
+                success: false,
+                errors: [`Failed to connect to AWS S3: ${error.message}`]
+            });
+        }
+    } catch (error) {
+        console.error('Error in test-connection endpoint:', error);
+        res.status(500).json({
+            success: false,
+            errors: [`Unexpected error: ${error.message}`]
+        });
+    }
+}); 

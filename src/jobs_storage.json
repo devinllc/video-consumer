@@ -1,0 +1,212 @@
+{
+  "c949371c-f9af-46ef-8cb1-305c832a7742": {
+    "status": "COMPLETED",
+    "startTime": "2025-03-22T11:53:37.475Z",
+    "videoKey": "test-video.mp4",
+    "logs": [
+      {
+        "timestamp": "2025-03-22T11:53:37.475Z",
+        "message": "Task definition requested"
+      },
+      {
+        "timestamp": "2025-03-22T11:53:39.475Z",
+        "message": "Task status: PROVISIONING"
+      },
+      {
+        "timestamp": "2025-03-22T11:53:42.475Z",
+        "message": "Task status: PENDING"
+      },
+      {
+        "timestamp": "2025-03-22T11:53:47.475Z",
+        "message": "Task status: RUNNING"
+      },
+      {
+        "timestamp": "2025-03-22T11:53:52.475Z",
+        "message": "[Container] Starting transcoding process"
+      },
+      {
+        "timestamp": "2025-03-22T11:53:57.475Z",
+        "message": "[Container] Downloaded original video successfully"
+      },
+      {
+        "timestamp": "2025-03-22T11:54:07.475Z",
+        "message": "[Container] Analyzing video properties"
+      },
+      {
+        "timestamp": "2025-03-22T11:54:17.475Z",
+        "message": "[Container] Creating 720p version"
+      },
+      {
+        "timestamp": "2025-03-22T11:54:37.475Z",
+        "message": "[Container] Encoded 720p version successfully"
+      },
+      {
+        "timestamp": "2025-03-22T11:54:47.475Z",
+        "message": "[Container] Creating 480p version"
+      },
+      {
+        "timestamp": "2025-03-22T11:55:07.475Z",
+        "message": "[Container] Encoded 480p version successfully"
+      },
+      {
+        "timestamp": "2025-03-22T11:55:17.475Z",
+        "message": "[Container] Creating 360p version"
+      },
+      {
+        "timestamp": "2025-03-22T11:55:37.475Z",
+        "message": "[Container] Encoded 360p version successfully"
+      },
+      {
+        "timestamp": "2025-03-22T11:55:47.475Z",
+        "message": "[Container] Creating HLS playlists"
+      },
+      {
+        "timestamp": "2025-03-22T11:55:57.475Z",
+        "message": "[Container] Uploading HLS files to S3"
+      },
+      {
+        "timestamp": "2025-03-22T11:56:07.475Z",
+        "message": "[Container] HLS files for 720p uploaded successfully"
+      },
+      {
+        "timestamp": "2025-03-22T11:56:17.475Z",
+        "message": "[Container] HLS files for 480p uploaded successfully"
+      },
+      {
+        "timestamp": "2025-03-22T11:56:27.475Z",
+        "message": "[Container] HLS files for 360p uploaded successfully"
+      },
+      {
+        "timestamp": "2025-03-22T11:56:37.475Z",
+        "message": "[Container] Master playlist created and uploaded"
+      },
+      {
+        "timestamp": "2025-03-22T11:56:47.475Z",
+        "message": "[Container] Transcoding completed successfully"
+      },
+      {
+        "timestamp": "2025-03-22T11:56:57.475Z",
+        "message": "Task status: COMPLETED"
+      },
+      {
+        "timestamp": "2025-03-22T11:56:58.475Z",
+        "message": "Streaming URL available at: https://s3.ap-south-1.amazonaws.com/platform-videos/output/test-video/master.m3u8"
+      }
+    ],
+    "performanceLevel": "standard",
+    "streaming": {
+      "videoId": "test-video",
+      "masterPlaylist": "https://example.com/output/test-video/master.m3u8",
+      "resolutions": {
+        "720p": "https://example.com/output/test-video/720p/index.m3u8",
+        "480p": "https://example.com/output/test-video/480p/index.m3u8",
+        "360p": "https://example.com/output/test-video/360p/index.m3u8"
+      }
+    }
+  },
+  "37ffdd5a-56cc-40f9-b959-2ca3ee0a90e1": {
+    "status": "COMPLETED",
+    "startTime": "2025-03-22T12:05:13.097Z",
+    "videoKey": "test-video.mp4",
+    "logs": [
+      {
+        "timestamp": "2025-03-22T12:05:13.097Z",
+        "message": "Task definition requested"
+      },
+      {
+        "timestamp": "2025-03-22T12:05:15.097Z",
+        "message": "Task status: PROVISIONING"
+      },
+      {
+        "timestamp": "2025-03-22T12:05:18.097Z",
+        "message": "Task status: PENDING"
+      },
+      {
+        "timestamp": "2025-03-22T12:05:23.097Z",
+        "message": "Task status: RUNNING"
+      },
+      {
+        "timestamp": "2025-03-22T12:05:28.097Z",
+        "message": "[Container] Starting transcoding process"
+      },
+      {
+        "timestamp": "2025-03-22T12:05:33.097Z",
+        "message": "[Container] Downloaded original video successfully"
+      },
+      {
+        "timestamp": "2025-03-22T12:05:43.097Z",
+        "message": "[Container] Analyzing video properties"
+      },
+      {
+        "timestamp": "2025-03-22T12:05:53.097Z",
+        "message": "[Container] Creating 720p version"
+      },
+      {
+        "timestamp": "2025-03-22T12:06:13.097Z",
+        "message": "[Container] Encoded 720p version successfully"
+      },
+      {
+        "timestamp": "2025-03-22T12:06:23.097Z",
+        "message": "[Container] Creating 480p version"
+      },
+      {
+        "timestamp": "2025-03-22T12:06:43.097Z",
+        "message": "[Container] Encoded 480p version successfully"
+      },
+      {
+        "timestamp": "2025-03-22T12:06:53.097Z",
+        "message": "[Container] Creating 360p version"
+      },
+      {
+        "timestamp": "2025-03-22T12:07:13.097Z",
+        "message": "[Container] Encoded 360p version successfully"
+      },
+      {
+        "timestamp": "2025-03-22T12:07:23.097Z",
+        "message": "[Container] Creating HLS playlists"
+      },
+      {
+        "timestamp": "2025-03-22T12:07:33.097Z",
+        "message": "[Container] Uploading HLS files to S3"
+      },
+      {
+        "timestamp": "2025-03-22T12:07:43.097Z",
+        "message": "[Container] HLS files for 720p uploaded successfully"
+      },
+      {
+        "timestamp": "2025-03-22T12:07:53.097Z",
+        "message": "[Container] HLS files for 480p uploaded successfully"
+      },
+      {
+        "timestamp": "2025-03-22T12:08:03.097Z",
+        "message": "[Container] HLS files for 360p uploaded successfully"
+      },
+      {
+        "timestamp": "2025-03-22T12:08:13.097Z",
+        "message": "[Container] Master playlist created and uploaded"
+      },
+      {
+        "timestamp": "2025-03-22T12:08:23.097Z",
+        "message": "[Container] Transcoding completed successfully"
+      },
+      {
+        "timestamp": "2025-03-22T12:08:33.097Z",
+        "message": "Task status: COMPLETED"
+      },
+      {
+        "timestamp": "2025-03-22T12:08:34.097Z",
+        "message": "Streaming URL available at: https://s3.ap-south-1.amazonaws.com/platform-videos/output/test-video/master.m3u8"
+      }
+    ],
+    "performanceLevel": "standard",
+    "streaming": {
+      "videoId": "test-video",
+      "masterPlaylist": "https://example.com/output/test-video/master.m3u8",
+      "resolutions": {
+        "720p": "https://example.com/output/test-video/720p/index.m3u8",
+        "480p": "https://example.com/output/test-video/480p/index.m3u8",
+        "360p": "https://example.com/output/test-video/360p/index.m3u8"
+      }
+    }
+  }
+}

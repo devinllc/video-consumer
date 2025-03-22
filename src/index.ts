@@ -12,14 +12,18 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import os from 'os';
 import { promisify } from 'util';
+import streamRoutes from './routes/stream';
 
 const app = express();
 
 // Enable CORS for all routes
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'Accept', 'Origin', 'X-Requested-With'],
+    exposedHeaders: ['Content-Length', 'Content-Range', 'Content-Disposition', 'Accept-Ranges'],
+    credentials: true,
+    maxAge: 86400
 }));
 
 // Parse JSON bodies
@@ -27,6 +31,9 @@ app.use(express.json());
 
 // Serve static files from the frontend directory
 app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Register streaming routes
+app.use('/api/stream', streamRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response): void => {

@@ -56,6 +56,23 @@
             </div>
         </div>
 
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Enter Direct URL</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group">
+                            <input type="text" id="hls-url" class="form-control"
+                                placeholder="Enter HLS URL (e.g. http://example.com/video/master.m3u8)">
+                            <button class="btn btn-primary" id="load-video">Load Video</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="row mb-4">
             <div class="col-md-8">
                 <div class="card">
@@ -66,18 +83,13 @@
                         <div class="video-container">
                             <video id="video-player" controls></video>
                         </div>
-                        <div class="resolution-selector">
+                        <div class="resolution-selector mt-3">
                             <label class="form-label">Resolution:</label>
                             <div class="btn-group" role="group" id="resolution-buttons">
-                                <button type="button" class="btn btn-outline-primary"
-                                    data-resolution="720p">720p</button>
-                                <button type="button" class="btn btn-outline-primary"
-                                    data-resolution="480p">480p</button>
-                                <button type="button" class="btn btn-outline-primary"
-                                    data-resolution="360p">360p</button>
+                                <!-- Resolution buttons will be added dynamically -->
                             </div>
                         </div>
-                        <div class="alert alert-info" id="player-message">
+                        <div class="alert alert-info mt-3" id="player-message">
                             Select a video from the list of completed jobs to play.
                         </div>
                     </div>
@@ -85,8 +97,11 @@
             </div>
             <div class="col-md-4">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Completed Videos</h5>
+                        <button class="btn btn-sm btn-outline-primary btn-refresh">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
                     </div>
                     <div class="card-body">
                         <div id="completed-jobs-list">
@@ -109,19 +124,66 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const videoPlayer = document.getElementById('video-player');
-            const resolutionButtons = document.getElementById('resolution-buttons').querySelectorAll('button');
+            const urlInput = document.getElementById('hls-url');
+            const loadButton = document.getElementById('load-video');
+            const resolutionButtons = document.getElementById('resolution-buttons');
             const playerMessage = document.getElementById('player-message');
             const completedJobsList = document.getElementById('completed-jobs-list');
 
             let currentVideoId = null;
             let currentVideoData = null;
+            let currentHls = null;
+
+            // Check URL parameters for direct video loading
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlFromParam = urlParams.get('url');
+            const jobIdFromParam = urlParams.get('jobId');
+
+            if (urlFromParam) {
+                // Load video from URL parameter
+                urlInput.value = urlFromParam;
+                loadStream(urlFromParam);
+            } else if (jobIdFromParam) {
+                // Load video from job ID
+                loadVideoPlayer(jobIdFromParam);
+            }
 
             // Load completed jobs
             loadCompletedJobs();
 
+            // Add event listener for the load button
+            loadButton.addEventListener('click', () => {
+                const url = urlInput.value.trim();
+                if (url) {
+                    loadStream(url);
+                } else {
+                    showErrorMessage('Please enter a valid URL');
+                }
+            });
+
+            // Add event listener for the Enter key in the URL input
+            urlInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    const url = urlInput.value.trim();
+                    if (url) {
+                        loadStream(url);
+                    } else {
+                        showErrorMessage('Please enter a valid URL');
+                    }
+                }
+            });
+
             // Function to load completed jobs
             function loadCompletedJobs() {
-                jobManager.fetchJobs()
+                playerMessage.innerHTML = 'Loading completed jobs...';
+
+                fetch(window.getApiUrl('jobs'))
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
                     .then(jobs => {
                         const completedJobs = jobs.filter(job => job.status === 'COMPLETED');
 
@@ -140,9 +202,14 @@
                                 <div class="card-body">
                                     <h6 class="card-title">${videoName}</h6>
                                     <p class="card-text small text-muted">ID: ${job.jobId}</p>
-                                    <button class="btn btn-sm btn-primary play-video" data-job-id="${job.jobId}">
-                                        Play Video
-                                    </button>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-sm btn-primary play-video" data-job-id="${job.jobId}">
+                                            Play Video
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary copy-url" data-job-id="${job.jobId}">
+                                            <i class="fas fa-copy"></i> Copy URL
+                                        </button>
+                                    </div>
                                 </div>
                             `;
                             completedJobsList.appendChild(jobItem);
@@ -151,12 +218,44 @@
                             jobItem.querySelector('.play-video').addEventListener('click', () => {
                                 loadVideoPlayer(job.jobId);
                             });
+
+                            // Add event listener to copy URL button
+                            jobItem.querySelector('.copy-url').addEventListener('click', () => {
+                                if (job.streaming && job.streaming.masterPlaylist) {
+                                    navigator.clipboard.writeText(job.streaming.masterPlaylist)
+                                        .then(() => {
+                                            showSuccessMessage('URL copied to clipboard!');
+                                        })
+                                        .catch(err => {
+                                            console.error('Could not copy URL: ', err);
+                                            showErrorMessage('Failed to copy URL');
+                                        });
+                                } else {
+                                    showErrorMessage('Streaming URL not available for this job');
+                                }
+                            });
                         });
                     })
                     .catch(error => {
                         console.error('Error loading completed jobs:', error);
                         completedJobsList.innerHTML = '<p class="text-center text-danger">Error loading jobs.</p>';
+                        playerMessage.innerHTML = 'Error: ' + error.message;
                     });
+            }
+
+            // Function to show success messages
+            function showSuccessMessage(message) {
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success position-fixed bottom-0 end-0 m-3';
+                alertDiv.style.zIndex = '1050';
+                alertDiv.innerHTML = `<i class="fas fa-check-circle me-2"></i>${message}`;
+
+                document.body.appendChild(alertDiv);
+
+                // Remove after 3 seconds
+                setTimeout(() => {
+                    alertDiv.remove();
+                }, 3000);
             }
 
             // Function to load video player with job ID
@@ -164,9 +263,23 @@
                 playerMessage.innerHTML = 'Loading video data...';
                 playerMessage.classList.remove('d-none');
 
+                // Destroy any existing HLS instance
+                if (currentHls) {
+                    currentHls.destroy();
+                    currentHls = null;
+                }
+
+                // Clear the video source
+                videoPlayer.src = '';
+
                 // Fetch job details to get streaming info
-                fetch(`/api/jobs/${jobId}`)
-                    .then(response => response.json())
+                fetch(window.getApiUrl(`jobs/${jobId}`))
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
                     .then(jobData => {
                         if (!jobData.streaming) {
                             playerMessage.innerHTML = 'This job does not have streaming information yet.';
@@ -174,65 +287,284 @@
                         }
 
                         currentVideoData = jobData.streaming;
-                        currentVideoId = jobData.streaming.videoId;
+                        currentVideoId = jobData.jobId;
 
-                        // Load the master playlist
-                        loadVideo(jobData.streaming.masterPlaylist);
+                        // First try to load from AWS S3
+                        loadStream(jobData.streaming.masterPlaylist, true)
+                            .catch(error => {
+                                console.warn('Failed to load from S3, falling back to local streaming:', error);
 
-                        // Update resolution buttons
-                        updateResolutionButtons(jobData.streaming.resolutions);
-
-                        // Hide the message
-                        playerMessage.classList.add('d-none');
+                                // If S3 fails, try the local endpoint
+                                const localUrl = window.getApiUrl(`stream/m3u8/${jobData.jobId}_master.m3u8`);
+                                return loadStream(localUrl, false);
+                            })
+                            .catch(error => {
+                                console.error('Both streaming methods failed:', error);
+                                showErrorMessage('Failed to load video: ' + error.message);
+                                playerMessage.innerHTML = 'Error: Unable to load video from any source.';
+                                playerMessage.classList.remove('d-none');
+                            });
                     })
                     .catch(error => {
                         console.error('Error loading job details:', error);
-                        playerMessage.innerHTML = 'Error loading video data.';
+                        playerMessage.innerHTML = 'Error loading video data: ' + error.message;
                         playerMessage.classList.remove('d-none');
                     });
             }
 
-            // Function to load video with URL
-            function loadVideo(url) {
-                if (Hls.isSupported()) {
-                    const hls = new Hls();
-                    hls.loadSource(url);
-                    hls.attachMedia(videoPlayer);
-                    hls.on(Hls.Events.MANIFEST_PARSED, function () {
-                        videoPlayer.play();
-                    });
-                } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
-                    // Native HLS support (Safari)
-                    videoPlayer.src = url;
-                    videoPlayer.addEventListener('loadedmetadata', function () {
-                        videoPlayer.play();
-                    });
-                } else {
-                    playerMessage.innerHTML = 'Your browser does not support HLS playback.';
-                    playerMessage.classList.remove('d-none');
+            // Add error handling for the video player
+            videoPlayer.addEventListener('error', function (e) {
+                console.error('Video player error:', videoPlayer.error);
+                // Display the error message to the user
+                showErrorMessage('Error loading video: ' + getVideoErrorMessage(videoPlayer.error));
+            });
+
+            // Function to show error messages
+            function showErrorMessage(message) {
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-danger';
+                alertDiv.innerHTML = `<i class="fas fa-exclamation-circle me-2"></i>${message}`;
+
+                // Insert before the video player
+                videoPlayer.parentNode.insertBefore(alertDiv, videoPlayer.nextSibling);
+
+                // Remove after 5 seconds
+                setTimeout(() => {
+                    alertDiv.remove();
+                }, 5000);
+            }
+
+            // Get a readable error message from the video element error code
+            function getVideoErrorMessage(error) {
+                if (!error) return 'Unknown error';
+
+                switch (error.code) {
+                    case 1: return 'Video loading aborted';
+                    case 2: return 'Network error. Please check your connection or the video URL';
+                    case 3: return 'Video decoding failed. The video might be corrupted or in an unsupported format';
+                    case 4: return 'Video not supported on this browser';
+                    default: return `Error code: ${error.code}`;
                 }
+            }
+
+            // Function to load an HLS stream
+            function loadStream(url, isSilent = false) {
+                return new Promise((resolve, reject) => {
+                    if (!url) {
+                        const error = new Error('Please enter a valid URL');
+                        if (!isSilent) showErrorMessage(error.message);
+                        reject(error);
+                        return;
+                    }
+
+                    try {
+                        // Hide error message first
+                        playerMessage.classList.add('d-none');
+
+                        // Clear any existing resolutions
+                        resolutionButtons.innerHTML = '';
+
+                        // Destroy any existing HLS instance
+                        if (currentHls) {
+                            currentHls.destroy();
+                            currentHls = null;
+                        }
+
+                        // Clear the video source
+                        videoPlayer.src = '';
+
+                        // Initialize HLS.js if supported
+                        if (Hls.isSupported()) {
+                            const hls = new Hls({
+                                xhrSetup: function (xhr) {
+                                    // Add CORS headers for HLS requests
+                                    xhr.withCredentials = false; // Do not send cookies
+                                },
+                                // Enable for more detailed logging if needed
+                                // debug: true,
+                                // For better error recovery
+                                maxLoadingDelay: 4,
+                                maxMaxBufferLength: 60,
+                                maxBufferSize: 30 * 1000 * 1000, // 30MB
+                                enableWorker: true,
+                                lowLatencyMode: false
+                            });
+
+                            let loadingTimedOut = false;
+                            const loadingTimeout = setTimeout(() => {
+                                loadingTimedOut = true;
+                                if (!isSilent) showErrorMessage('Loading timed out. The server might be unavailable.');
+                                reject(new Error('Loading timed out'));
+                            }, 10000); // 10 seconds timeout
+
+                            const clearLoadingTimeout = () => {
+                                clearTimeout(loadingTimeout);
+                                if (loadingTimedOut) return; // Already timed out
+                            };
+
+                            hls.loadSource(url);
+                            hls.attachMedia(videoPlayer);
+
+                            currentHls = hls;
+
+                            // Handle HLS events
+                            hls.on(Hls.Events.ERROR, function (event, data) {
+                                clearLoadingTimeout();
+
+                                if (data.fatal) {
+                                    switch (data.type) {
+                                        case Hls.ErrorTypes.NETWORK_ERROR:
+                                            // Try to recover network error
+                                            console.error('HLS network error:', data);
+                                            if (!isSilent) showErrorMessage('Network error: ' + data.details);
+                                            hls.startLoad();
+                                            break;
+                                        case Hls.ErrorTypes.MEDIA_ERROR:
+                                            // Try to recover media error
+                                            console.error('HLS media error:', data);
+                                            if (!isSilent) showErrorMessage('Media error: ' + data.details);
+                                            hls.recoverMediaError();
+                                            break;
+                                        default:
+                                            // Cannot recover
+                                            console.error('Fatal HLS error:', data);
+                                            if (!isSilent) showErrorMessage('Fatal error: ' + data.details);
+                                            hls.destroy();
+                                            currentHls = null;
+                                            reject(new Error('Fatal HLS error: ' + data.details));
+                                            break;
+                                    }
+                                } else {
+                                    // Non-fatal error
+                                    console.warn('Non-fatal HLS error:', data);
+                                }
+                            });
+
+                            // When the manifest is loaded, we can get the available resolutions
+                            hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+                                clearLoadingTimeout();
+
+                                // Try to auto-play
+                                videoPlayer.play().catch(e => {
+                                    console.warn('Auto-play failed:', e);
+                                    if (!isSilent) showErrorMessage('Auto-play failed. Please click play manually.');
+                                });
+
+                                // Get available resolutions
+                                const availableLevels = data.levels;
+
+                                // Add resolution buttons
+                                if (availableLevels.length > 1) {
+                                    resolutionButtons.innerHTML = ''; // Clear existing buttons
+
+                                    // Add 'Auto' button first
+                                    const autoButton = document.createElement('button');
+                                    autoButton.className = 'btn btn-sm btn-outline-primary me-2 active';
+                                    autoButton.textContent = 'Auto';
+                                    autoButton.onclick = function () {
+                                        hls.currentLevel = -1; // Auto
+
+                                        // Update active state of buttons
+                                        document.querySelectorAll('#resolution-buttons button').forEach(btn => {
+                                            btn.classList.remove('active');
+                                        });
+                                        autoButton.classList.add('active');
+                                    };
+                                    resolutionButtons.appendChild(autoButton);
+
+                                    // Add resolution buttons from highest to lowest
+                                    availableLevels
+                                        .slice()
+                                        .sort((a, b) => b.height - a.height) // Sort by height in descending order
+                                        .forEach((level, index) => {
+                                            const resolution = level.height + 'p';
+                                            const button = document.createElement('button');
+                                            button.className = 'btn btn-sm btn-outline-primary me-2';
+                                            button.textContent = resolution;
+                                            button.onclick = function () {
+                                                // Find the index in the original levels array
+                                                const originalIndex = availableLevels.findIndex(l =>
+                                                    l.height === level.height && l.width === level.width);
+
+                                                hls.currentLevel = originalIndex;
+
+                                                // Update active state of buttons
+                                                document.querySelectorAll('#resolution-buttons button').forEach(btn => {
+                                                    btn.classList.remove('active');
+                                                });
+                                                button.classList.add('active');
+                                            };
+                                            resolutionButtons.appendChild(button);
+                                        });
+                                }
+
+                                resolve();
+                            });
+
+                            hls.on(Hls.Events.FRAG_LOADED, function () {
+                                clearLoadingTimeout();
+                            });
+                        }
+                        // For browsers that have native HLS support (Safari, iOS, etc.)
+                        else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                            videoPlayer.src = url;
+                            videoPlayer.addEventListener('loadedmetadata', function () {
+                                videoPlayer.play().catch(e => {
+                                    console.warn('Auto-play failed:', e);
+                                    if (!isSilent) showErrorMessage('Auto-play failed. Please click play manually.');
+                                });
+                                resolve();
+                            });
+
+                            videoPlayer.addEventListener('error', function (e) {
+                                clearTimeout(loadingTimeout);
+                                if (!isSilent) showErrorMessage('Error loading video: ' + getVideoErrorMessage(videoPlayer.error));
+                                reject(new Error('Video loading error'));
+                            });
+                        }
+                        // Browser doesn't support HLS
+                        else {
+                            const error = new Error('Browser does not support HLS');
+                            if (!isSilent) showErrorMessage('Your browser does not support HLS streaming. Please use Chrome, Firefox, Safari, or Edge.');
+                            reject(error);
+                        }
+                    } catch (error) {
+                        console.error('Error loading stream:', error);
+                        if (!isSilent) showErrorMessage('Error loading stream: ' + error.message);
+                        reject(error);
+                    }
+                });
             }
 
             // Function to update resolution buttons
             function updateResolutionButtons(resolutions) {
                 if (!resolutions) return;
 
-                // Enable all resolution buttons that are available
-                resolutionButtons.forEach(button => {
-                    const resolution = button.getAttribute('data-resolution');
-                    if (resolutions[resolution]) {
-                        button.disabled = false;
-                        button.addEventListener('click', () => {
-                            loadVideo(resolutions[resolution]);
+                // Clear existing resolution buttons
+                resolutionButtons.innerHTML = '';
 
-                            // Update active button
-                            resolutionButtons.forEach(btn => btn.classList.remove('active'));
-                            button.classList.add('active');
-                        });
-                    } else {
-                        button.disabled = true;
-                    }
-                });
+                // Create buttons for each resolution
+                for (const [resolution, url] of Object.entries(resolutions)) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-sm btn-outline-primary me-2';
+                    button.textContent = resolution;
+                    button.setAttribute('data-resolution', resolution);
+                    button.addEventListener('click', () => {
+                        // Update active button
+                        resolutionButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+                        button.classList.add('active');
+
+                        // Load the selected resolution
+                        loadStream(url);
+                    });
+                    resolutionButtons.appendChild(button);
+                }
+
+                // Set the first button as active
+                const firstButton = resolutionButtons.querySelector('button');
+                if (firstButton) {
+                    firstButton.classList.add('active');
+                }
             }
 
             // Add refresh button functionality

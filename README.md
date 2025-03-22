@@ -456,14 +456,110 @@ A complete video processing system that allows you to upload, transcode, and str
 
 ## Quick Start
 
-### Option 1: Automatic Setup (Recommended)
+### Option 1: Using PM2 (Recommended for Production)
 
-1. SSH into your EC2 instance:
+1. SSH into your server:
    ```
-   ssh ec2-user@your-ec2-ip
+   ssh username@your-server-ip
    ```
 
-2. Clone the repository and run the setup script:
+2. Clone the repository:
+   ```
+   git clone https://github.com/devinllc/video-consumer.git
+   cd video-consumer
+   ```
+
+3. Install dependencies and set up the application:
+   ```
+   npm install
+   chmod +x update.sh
+   ./update.sh
+   ```
+
+4. Configure Nginx to serve the frontend (if not already installed):
+   ```
+   # Install Nginx
+   sudo yum install nginx -y   # For CentOS/RHEL/Amazon Linux
+   # OR
+   sudo apt install nginx -y   # For Ubuntu/Debian
+   
+   # Create Nginx config
+   sudo mkdir -p /etc/nginx/conf.d
+   sudo nano /etc/nginx/conf.d/video-processing.conf
+   ```
+
+5. Add the following configuration to Nginx:
+   ```nginx
+   server {
+       listen 80;
+       server_name _;
+       root /path/to/video-consumer/frontend-app;
+       
+       # Serve static files from frontend-app
+       location / {
+           try_files $uri $uri/ /index.html;
+       }
+       
+       # Proxy API requests to Node.js backend
+       location /api/ {
+           proxy_pass http://localhost:3001;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+           
+           # CORS headers
+           add_header 'Access-Control-Allow-Origin' '*' always;
+           add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+           add_header 'Access-Control-Allow-Headers' 'Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With,Range' always;
+           add_header 'Access-Control-Expose-Headers' 'Content-Length,Content-Range,Content-Disposition,Accept-Ranges' always;
+           
+           # Handle preflight requests
+           if ($request_method = 'OPTIONS') {
+               add_header 'Access-Control-Allow-Origin' '*';
+               add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
+               add_header 'Access-Control-Allow-Headers' 'Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With,Range';
+               add_header 'Access-Control-Max-Age' 86400;
+               add_header 'Content-Type' 'text/plain charset=UTF-8';
+               add_header 'Content-Length' 0;
+               return 204;
+           }
+       }
+       
+       # Proxy health check endpoint
+       location /health {
+           proxy_pass http://localhost:3001/health;
+           proxy_http_version 1.1;
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+       }
+       
+       # Special configuration for HLS streaming
+       location ~ \.(m3u8|ts)$ {
+           root /path/to/video-consumer/uploads;
+           add_header 'Access-Control-Allow-Origin' '*' always;
+           add_header 'Cache-Control' 'no-cache' always;
+           # HLS playlist needs to be refreshed periodically
+           expires -1;
+       }
+   }
+   ```
+
+   Replace `/path/to/video-consumer` with your actual path.
+
+6. Start and enable Nginx:
+   ```
+   sudo systemctl start nginx
+   sudo systemctl enable nginx
+   ```
+
+7. Your application should now be accessible at `http://your-server-ip`
+
+### Option 2: Using the Automatic Setup Script
+
+1. SSH into your server
+2. Run:
    ```
    git clone https://github.com/devinllc/video-consumer.git
    cd video-consumer
@@ -471,106 +567,190 @@ A complete video processing system that allows you to upload, transcode, and str
    ./setup.sh
    ```
 
-3. The setup script will:
-   - Install all necessary dependencies
-   - Configure Nginx to serve the frontend
-   - Set up the backend as a systemd service
-   - Configure your system to handle IP address changes
-   - Start all services
+## Updating the Application
 
-### Option 2: Manual Setup
-
-1. Clone the repository:
-   ```
-   git clone https://github.com/devinllc/video-consumer.git
-   cd video-consumer
-   ```
-
-2. Install dependencies:
-   ```
-   npm install
-   ```
-
-3. Build the application:
-   ```
-   npm run build
-   ```
-
-4. Start the development server:
-   ```
-   npm run dev
-   ```
-
-## Handling EC2 IP Address Changes
-
-This system is designed to handle EC2 IP address changes automatically:
-
-1. The frontend detects the server's current IP address and adjusts API calls accordingly
-2. When your EC2 instance stops and starts (which changes its public IP), no configuration changes are needed
-3. Users can access the system using the current public IP address
-
-## AWS Configuration
-
-To use the video processing features, you need to configure your AWS settings:
-
-1. Navigate to the Configuration page at `http://your-ec2-ip/config.html`
-2. Enter your AWS Region, Access Key, and Secret Key
-3. Configure your S3 bucket details
-4. Set up your ECS cluster information (if using ECS for transcoding)
-5. Test the connection to verify your settings
-
-## Directory Structure
-
-- `/frontend-app` - The main frontend application
-- `/frontend` - Legacy frontend files (for reference)
-- `/src` - Backend source code
-- `/dist` - Compiled backend code
-- `/public` - Static files served by the backend
-
-## Development
-
-To start the development server:
+To update to the latest version:
 
 ```
-npm run dev
+cd video-consumer
+./update.sh
 ```
 
-To build for production:
-
-```
-npm run build
-```
-
-## Accessing the Application
-
-After setup, you can access the application at:
-
-```
-http://your-ec2-ip
-```
-
-The application will automatically adjust to IP changes when your EC2 instance restarts.
+This will pull the latest changes, install dependencies, build the application, and restart it with PM2.
 
 ## Troubleshooting
 
-If you encounter issues:
+### Common Issues and Solutions
 
-1. Check the backend logs:
-   ```
-   sudo journalctl -u video-processor -f
-   ```
+#### 1. CORS Issues with Streaming
 
-2. Check the Nginx logs:
-   ```
-   sudo tail -f /var/log/nginx/error.log
-   ```
+If you're experiencing CORS issues with video streaming:
 
-3. Restart the services:
-   ```
-   sudo systemctl restart video-processor
-   sudo systemctl restart nginx
-   ```
+- Ensure Nginx is properly configured with CORS headers as shown above
+- Check that the backend has CORS properly enabled
+- Verify that your browser isn't blocking cross-origin requests
+- Check browser console for specific CORS error messages
+
+**Solution**: The configuration in this README includes all necessary CORS headers for streaming.
+
+#### 2. Video Upload Fails
+
+- Check if the `uploads` directory exists and has proper permissions
+- Verify AWS credentials are correctly configured
+- Check if S3 bucket permissions allow uploads
+
+**Solution**:
+```bash
+# Make sure uploads directory exists and has proper permissions
+mkdir -p uploads
+chmod 755 uploads
+
+# Verify AWS configuration in the config page
+```
+
+#### 3. Transcoding Jobs Fail
+
+- Check if Docker is installed and running (for self-hosted transcoding)
+- Verify AWS ECS configuration (for AWS-based transcoding)
+- Check the job logs in the jobs page for specific error messages
+
+**Solution**:
+```bash
+# Check Docker status
+sudo systemctl status docker
+
+# Install Docker if needed
+sudo yum install docker -y
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+#### 4. Server Won't Start After Updates
+
+- Check logs for error messages
+- Verify all dependencies are installed
+- Check for TypeScript errors during build
+
+**Solution**:
+```bash
+# Check PM2 logs
+pm2 logs video-backend
+
+# Check for missing dependencies and install them
+npm install
+
+# Restart the application
+pm2 restart video-backend
+```
+
+#### 5. IP Address Changed and Application Not Working
+
+The application should automatically adapt to IP changes. If not:
+
+**Solution**:
+- Update your Nginx configuration if needed
+- Make sure the `env.js` file is using `window.location.hostname` for API URLs
+- Restart Nginx: `sudo systemctl restart nginx`
+
+### Debugging Tools
+
+#### Viewing Logs
+
+```bash
+# Backend logs
+pm2 logs video-backend
+
+# Nginx access logs
+sudo tail -f /var/log/nginx/access.log
+
+# Nginx error logs
+sudo tail -f /var/log/nginx/error.log
+```
+
+#### Checking Service Status
+
+```bash
+# Check backend status
+pm2 status
+
+# Check Nginx status
+sudo systemctl status nginx
+
+# Check all listening ports
+sudo netstat -tulpn | grep LISTEN
+```
+
+## AWS Configuration Guide
+
+### Required AWS Resources
+
+1. **S3 Bucket**: For storing videos and transcoded segments
+2. **IAM User**: With permissions to access S3 and ECS services
+3. **ECS Cluster**: (Optional) For cloud-based transcoding
+
+### IAM Policy Recommendations
+
+Your IAM user should have these permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::your-bucket-name",
+        "arn:aws:s3:::your-bucket-name/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:RunTask",
+        "ecs:DescribeTasks",
+        "ecs:DescribeClusters",
+        "ecs:DescribeTaskDefinition",
+        "ecs:ListTasks"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+## Architecture
+
+The system consists of several key components:
+
+1. **Frontend**: HTML/CSS/JS application for user interface
+2. **Backend API**: Node.js Express server that handles requests
+3. **Storage**: Local storage and AWS S3 for video files
+4. **Transcoding**: Using either local Docker containers or AWS ECS
+
+## API Endpoints
+
+- `GET /api/health`: Health check
+- `GET /api/config`: Get current AWS configuration
+- `POST /api/config`: Update AWS configuration
+- `POST /api/upload`: Upload a video file
+- `POST /api/start-transcoding`: Start a transcoding job
+- `GET /api/jobs`: List all transcoding jobs
+- `GET /api/jobs/:id`: Get details of a specific job
+- `POST /api/import-jobs`: Import jobs from AWS
+- `POST /api/test-connection`: Test AWS connection
+- `POST /api/test-s3`: Test S3 bucket access
+- `GET /api/check-upload-ready`: Check if system is configured for uploads
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License. 

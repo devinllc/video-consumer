@@ -16,9 +16,41 @@ const app = express();
 
 // Enable CORS for all routes
 app.use(cors({
-    origin: process.env.FRONTEND_URL || '*',
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl, etc)
+        if (!origin) return callback(null, true);
+
+        // List of allowed origins
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://localhost:8080',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:3001',
+            'http://127.0.0.1:8080'
+        ];
+
+        // Add EC2 public IP if available
+        if (process.env.EC2_PUBLIC_IP) {
+            allowedOrigins.push(`http://${process.env.EC2_PUBLIC_IP}:3001`);
+        }
+
+        // Add custom frontend URL if specified in environment
+        if (process.env.FRONTEND_URL) {
+            allowedOrigins.push(process.env.FRONTEND_URL);
+        }
+
+        // Check if origin is allowed
+        if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+            callback(null, true);
+        } else {
+            console.log(`Origin ${origin} not allowed by CORS`);
+            callback(null, false);
+        }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
 }));
 
 // Parse JSON bodies
@@ -622,7 +654,7 @@ async function execCommand(command) {
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 function startServer(port) {
-    const server = app.listen(port)
+    const server = app.listen(port, '0.0.0.0')
         .on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
                 console.log(`Port ${port} is busy, trying ${port + 1}...`);
@@ -634,7 +666,11 @@ function startServer(port) {
         })
         .on('listening', () => {
             console.log(`Server running on port ${port}`);
+            if (process.env.EC2_PUBLIC_IP) {
+                console.log(`Access the application at http://${process.env.EC2_PUBLIC_IP}:${port}`);
+            }
         });
+    return server;
 }
 
 // Monitor ECS task status

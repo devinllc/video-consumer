@@ -231,3 +231,186 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - AWS for providing the cloud infrastructure
 - FFmpeg for video transcoding capabilities
 - Node.js and Express for the backend framework
+
+# Video Processing System: AWS EC2 Deployment Guide
+
+This guide provides step-by-step instructions for deploying the Video Processing System on AWS EC2 using the free tier.
+
+## Table of Contents
+1. [Prerequisites](#prerequisites)
+2. [AWS EC2 Setup](#aws-ec2-setup)
+3. [Server Configuration](#server-configuration)
+4. [Application Deployment](#application-deployment)
+5. [AWS S3 Configuration](#aws-s3-configuration)
+6. [Accessing Your Application](#accessing-your-application)
+7. [Cost Management](#cost-management)
+8. [Troubleshooting](#troubleshooting)
+
+## Prerequisites
+- AWS account (free tier eligible)
+- SSH client (Terminal on macOS/Linux, PuTTY on Windows)
+- Basic understanding of command line
+
+## AWS EC2 Setup
+
+### Step 1: Launch an EC2 Instance
+1. Log in to [AWS Management Console](https://console.aws.amazon.com/)
+2. Navigate to EC2 Dashboard
+3. Click "Launch Instance"
+4. Select "Amazon Linux 2023" (free tier eligible)
+5. Choose t2.micro instance type (free tier eligible)
+6. Configure instance details (leave default settings)
+7. Add storage (8 GB is sufficient and free tier eligible)
+8. Add tags (optional)
+9. Configure security group:
+   - Allow SSH (port 22) from your IP
+   - Allow HTTP (port 80)
+   - Allow HTTPS (port 443)
+   - Allow Custom TCP (port 3001)
+10. Review and launch
+11. Create or select an existing key pair and download it
+12. Launch the instance
+
+### Step 2: Connect to Your Instance
+1. Change permissions for your key file:
+   ```bash
+   chmod 400 your-key-file.pem
+   ```
+
+2. Connect using SSH:
+   ```bash
+   ssh -i your-key-file.pem ec2-user@your-instance-public-ip
+   ```
+
+## Server Configuration
+
+### Step 1: Update System and Install Dependencies
+```bash
+# Update system packages
+sudo dnf update -y
+
+# Install Node.js
+curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+sudo dnf install -y nodejs git
+
+# Install PM2 for process management
+sudo npm install -g pm2
+```
+
+### Step 2: Clone the Repository
+```bash
+# Clone the application repository
+git clone https://github.com/devinllc/video-consumer.git
+cd video-consumer
+
+# Install dependencies
+npm install
+```
+
+## Application Deployment
+
+### Step 1: Configure Environment Variables
+Create a `.env` file with your AWS credentials and application settings:
+
+```bash
+# Create .env file
+cat > .env << EOF
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+S3_BUCKET_NAME=your-bucket-name
+PORT=3001
+NODE_ENV=production
+EOF
+```
+
+### Step 2: Start the Application
+```bash
+# Start the application with PM2
+pm2 start src/index.js --name video-backend
+
+# Ensure application starts on reboot
+pm2 startup
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user
+pm2 save
+
+# Check application status
+pm2 status
+```
+
+## AWS S3 Configuration
+
+### Step 1: Create an S3 Bucket
+1. Navigate to S3 in the AWS Console
+2. Click "Create bucket"
+3. Enter a unique bucket name
+4. Select your preferred region (same as in your .env file)
+5. Configure other settings as needed (default settings work for most cases)
+6. Click "Create bucket"
+
+### Step 2: Set Up IAM User and Permissions
+1. Navigate to IAM in the AWS Console
+2. Create a new user with programmatic access
+3. Attach the "AmazonS3FullAccess" policy
+4. Note the access key and secret key (add to your .env file)
+
+## Accessing Your Application
+
+### Frontend Application
+The application includes a frontend that will be served at:
+```
+http://your-instance-public-ip:3001
+```
+
+### API Endpoints
+The backend API will be available at:
+```
+http://your-instance-public-ip:3001/api
+```
+
+Test your connection:
+```bash
+curl http://your-instance-public-ip:3001/health
+```
+
+## Cost Management
+
+EC2 free tier allows:
+- 750 hours per month of t2.micro (enough for 1 instance 24/7)
+- 30 GB of EBS storage
+- 15 GB of bandwidth out
+
+To minimize costs:
+1. **Stop Your Instance When Not in Use**:
+   ```bash
+   # From AWS Console: Select instance → Actions → Instance State → Stop
+   # Or using AWS CLI:
+   aws ec2 stop-instances --instance-ids your-instance-id
+   ```
+
+2. **Monitor Usage**:
+   - Set up AWS Budgets to alert you when approaching free tier limits
+   - Regularly check the AWS Cost Explorer
+
+3. **Watch S3 Usage**:
+   - S3 free tier includes 5GB storage, 20,000 GET requests, and 2,000 PUT requests
+   - Delete unnecessary files
+
+## Troubleshooting
+
+### Connection Issues
+- Verify security group settings allow traffic on port 3001
+- Check that the application is running: `pm2 status`
+- View application logs: `pm2 logs video-backend`
+
+### AWS Credential Issues
+- Verify your AWS credentials are correct in the .env file
+- Check IAM permissions for your user
+
+### Application Errors
+- Check application logs: `pm2 logs video-backend`
+- Restart the application: `pm2 restart video-backend`
+
+---
+
+For more detailed troubleshooting or questions, please open an issue on GitHub.

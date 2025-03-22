@@ -361,6 +361,7 @@ The application includes a frontend that will be served at:
 ```
 http://your-instance-public-ip:3001
 ```
+For example, based on your deployment: `http://13.235.75.73:3001`
 
 ### API Endpoints
 The backend API will be available at:
@@ -372,6 +373,171 @@ Test your connection:
 ```bash
 curl http://your-instance-public-ip:3001/health
 ```
+For example: `curl http://13.235.75.73:3001/health` which should return a JSON response.
+
+## Updating Frontend Configuration After Deployment
+
+After deploying to AWS EC2, you'll need to update your frontend configuration to point to the new API endpoint:
+
+### Step 1: Locate Your EC2 Instance Public IP
+1. Find your EC2 instance public IP in the AWS Console or from SSH connection details
+2. Verify the backend is running by accessing `http://your-instance-public-ip:3001/health`
+   - Example: `http://13.235.75.73:3001/health`
+
+### Step 2: Update Frontend Configuration Files
+If you're hosting the frontend separately (like on Vercel):
+
+1. Update the API base URL in `frontend-app/env.js`:
+   ```javascript
+   // Environment configuration for video-consumer app
+   const API_BASE_URL = 'http://13.235.75.73:3001'; // Replace with your actual EC2 IP
+   ```
+
+2. If you have environment variables in your hosting platform (like Vercel):
+   - Go to your project settings
+   - Add an environment variable: `FRONTEND_URL` with your frontend URL
+   - Add an environment variable: `API_BASE_URL` with your EC2 instance URL
+
+### Step 3: If IP Address Changes
+When you stop and start an EC2 instance, its public IP might change (unless you use an Elastic IP). If this happens:
+
+1. Get the new IP address from AWS Console
+2. Update your frontend configuration as described above
+3. Redeploy your frontend or update environment variables
+
+### Step 4: Using an Elastic IP (Optional but Recommended)
+To maintain a consistent IP address even after stopping/starting your EC2 instance:
+
+1. Go to EC2 Dashboard → Elastic IPs → Allocate Elastic IP address
+2. Select the new Elastic IP and click "Associate"
+3. Choose your instance and click "Associate"
+4. Update your frontend configuration to use this static IP address
+
+This way, you won't need to update your frontend configuration each time you restart your EC2 instance.
+
+## CORS Configuration for Frontend Access
+
+When your frontend is deployed to a different domain than your backend (e.g., frontend on Vercel, backend on EC2), you need to configure CORS to allow cross-origin requests.
+
+### Step 1: Update EC2 Environment Variables
+Connect to your EC2 instance and add the frontend URL to your environment:
+
+```bash
+# Connect to your EC2 instance
+ssh -i your-key-file.pem ec2-user@your-ec2-ip
+
+# Create or edit the .env file
+nano .env
+
+# Add your frontend URL to the file
+FRONTEND_URL=https://your-frontend-domain.vercel.app
+
+# Save and exit (Ctrl+O, Enter, Ctrl+X)
+
+# Restart the application to apply changes
+pm2 restart video-backend
+```
+
+### Step 2: Verify CORS Settings in src/index.js
+The application is configured to automatically allow requests from the URL specified in `FRONTEND_URL`. If you're still having CORS issues:
+
+1. Edit the application code to explicitly add your frontend domain:
+```bash
+nano src/index.js
+```
+
+2. Find the CORS configuration section and add your domain to the `allowedOrigins` array:
+```javascript
+const allowedOrigins = [
+    // ... existing entries ...
+    'https://your-frontend-domain.vercel.app'
+];
+```
+
+3. Save the file and restart the application:
+```bash
+pm2 restart video-backend
+```
+
+### Step 3: Dealing with Mixed Content Errors
+If your frontend is on HTTPS (like Vercel) but your backend uses HTTP, browsers will block the requests due to "mixed content" issues. To fix this:
+
+1. **Option 1: Add a Content Security Policy meta tag** to your frontend HTML files:
+```html
+<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+```
+
+2. **Option 2: Set up HTTPS on your EC2 instance** using a service like Let's Encrypt (requires a domain name).
+
+3. **Option 3: Use an HTTPS proxy** service like ngrok to expose your EC2 endpoint securely.
+
+## AWS ECS Configuration
+
+If you want to use Amazon ECS for video transcoding tasks (as shown in your configuration form), follow these steps:
+
+### Step 1: Setting Up ECS Resources
+
+1. **Create an ECS Cluster**:
+   - Go to the ECS dashboard in AWS Console
+   - Click "Create Cluster"
+   - Choose "Fargate" for serverless container management
+   - Name your cluster (e.g., "video-transcoder-cluster")
+   - Click "Create"
+
+2. **Create a Task Definition**:
+   - In ECS dashboard, go to "Task Definitions"
+   - Click "Create new Task Definition"
+   - Choose "Fargate" for launch type
+   - Fill in the task definition details:
+     - Name: `video-transcoder`
+     - Task role: Create or select a role with S3 access
+     - Task execution role: Use the default
+     - Task memory: 2GB (minimum for video processing)
+     - Task CPU: 1 vCPU
+   - Add a container:
+     - Name: `transcoder-container`
+     - Image: `your-account-id.dkr.ecr.region.amazonaws.com/video-transcoder:latest`
+     - (You'll need to create this container image and push it to ECR)
+   - Click "Create"
+
+3. **Set Up Networking**:
+   - Create a VPC if you don't have one
+   - Create at least two subnets in different availability zones
+   - Create a security group that allows inbound traffic from your EC2 instance
+
+### Step 2: Configure Your Application to Use ECS
+
+Once you have your ECS resources set up, you can configure your application:
+
+1. Access your application's configuration page: `http://your-ec2-ip:3001/config.html`
+
+2. Fill in the ECS configuration:
+   - **ECS Cluster ARN**: `arn:aws:ecs:region:account:cluster/video-transcoder-cluster`
+   - **ECS Task Definition**: `arn:aws:ecs:region:account:task-definition/video-transcoder:1`
+   - **ECS Subnet IDs**: Your comma-separated subnet IDs (e.g., `subnet-xxx,subnet-yyy`)
+   - **ECS Security Group IDs**: Your comma-separated security group IDs (e.g., `sg-xxx`)
+
+3. Click "Save Configuration" and then "Test Connection" to validate
+
+### Step 3: Troubleshooting ECS Connection
+
+If you encounter errors in the connection test:
+
+1. **Check AWS Credentials**:
+   - Verify that your EC2 instance has the correct AWS credentials
+   - Ensure the IAM role or user has permissions for ECS, ECR, and S3
+
+2. **Verify ARNs and IDs**:
+   - Double-check all ARNs and IDs for typos
+   - Ensure the resources exist in the same region
+
+3. **Check Network Configuration**:
+   - Ensure subnets have internet access (via Internet Gateway or NAT Gateway)
+   - Verify security groups allow necessary traffic
+
+4. **Check Logs**:
+   - View application logs: `pm2 logs video-backend`
+   - Look for specific error messages related to AWS services
 
 ## Cost Management
 

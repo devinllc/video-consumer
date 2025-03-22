@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Player - Video Processing System</title>
+    <!-- Include env.js first to set the API Base URL -->
+    <script src="env.js"></script>
+    <!-- Include config.js after env.js -->
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- HLS.js for HLS streaming support -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+    <header>
+        <div class="app-title">
+            <i class="fas fa-film"></i>
+            <span>Video Processing System</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="card" id="player-section">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-play-circle"></i>
+                    Video Player
+                </h2>
+            </div>
+
+            <div class="player-container">
+                <video id="video-player" controls></video>
+                
+                <div id="resolution-menu" class="resolution-menu">
+                    <button class="button" data-resolution="master">Auto</button>
+                    <button class="button" data-resolution="720p">720p</button>
+                    <button class="button" data-resolution="480p">480p</button>
+                    <button class="button" data-resolution="360p">360p</button>
+                </div>
+
+                <div class="player-controls">
+                    <div class="url-input">
+                        <input type="text" id="hls-url" placeholder="Enter HLS URL or select a job">
+                        <button class="button" id="load-url-button">Load</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-section">
+                <h3>Recent Jobs</h3>
+                <div id="jobs-list" class="jobs-list-compact">
+                    <div class="alert alert-info">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Loading jobs...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const videoPlayer = document.getElementById('video-player');
+            const hlsUrlInput = document.getElementById('hls-url');
+            const loadUrlButton = document.getElementById('load-url-button');
+            const resolutionMenu = document.getElementById('resolution-menu');
+            const jobsList = document.getElementById('jobs-list');
+            
+            let hls = null;
+            let currentBaseUrl = '';
+            
+            // Setup URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlParam = urlParams.get('url');
+            
+            if (urlParam) {
+                hlsUrlInput.value = urlParam;
+                loadHlsStream(urlParam);
+            }
+            
+            // Load HLS stream function
+            function loadHlsStream(url) {
+                // Destroy existing HLS instance if exists
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+                
+                // Save the base URL for resolution switching
+                currentBaseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+                
+                // Create new HLS instance
+                if (Hls.isSupported()) {
+                    hls = new Hls();
+                    hls.loadSource(url);
+                    hls.attachMedia(videoPlayer);
+                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        videoPlayer.play();
+                    });
+                    
+                    // Handle HLS errors
+                    hls.on(Hls.Events.ERROR, function(event, data) {
+                        console.error('HLS error:', data);
+                        if (data.fatal) {
+                            switch(data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    console.error('Fatal network error encountered, trying to recover');
+                                    hls.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    console.error('Fatal media error encountered, trying to recover');
+                                    hls.recoverMediaError();
+                                    break;
+                                default:
+                                    console.error('Fatal error, cannot recover');
+                                    hls.destroy();
+                                    break;
+                            }
+                        }
+                    });
+                } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                    // For Safari on iOS
+                    videoPlayer.src = url;
+                    videoPlayer.addEventListener('loadedmetadata', function() {
+                        videoPlayer.play();
+                    });
+                } else {
+                    console.error('HLS is not supported on this browser/device');
+                    alert('HLS streaming is not supported in your browser/device');
+                }
+            }
+            
+            // Setup URL button
+            loadUrlButton.addEventListener('click', () => {
+                const url = hlsUrlInput.value.trim();
+                if (url) {
+                    loadHlsStream(url);
+                }
+            });
+            
+            // Setup resolution buttons
+            const resolutionButtons = resolutionMenu.querySelectorAll('button');
+            resolutionButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    // Remove active class from all buttons
+                    resolutionButtons.forEach(btn => btn.classList.remove('active'));
+                    
+                    // Add active class to clicked button
+                    button.classList.add('active');
+                    
+                    // Get the resolution
+                    const resolution = button.getAttribute('data-resolution');
+                    if (!currentBaseUrl) return;
+                    
+                    let streamUrl;
+                    if (resolution === 'master') {
+                        // Use the master playlist
+                        streamUrl = currentBaseUrl + 'master.m3u8';
+                    } else {
+                        // Use the specific resolution
+                        streamUrl = currentBaseUrl + resolution + '/index.m3u8';
+                    }
+                    
+                    // Load the new stream
+                    loadHlsStream(streamUrl);
+                });
+            });
+            
+            // Fetch jobs to populate the jobs list
+            function fetchJobs() {
+                fetch(getApiUrl(API_CONFIG.ENDPOINTS.JOBS))
+                    .then(response => response.json())
+                    .then(jobs => {
+                        if (jobs.length === 0) {
+                            jobsList.innerHTML = `
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span>No completed jobs found</span>
+                                </div>
+                            `;
+                            return;
+                        }
+                        
+                        jobsList.innerHTML = '';
+                        
+                        // Filter to only show completed jobs
+                        const completedJobs = jobs.filter(job => job.status === 'COMPLETED');
+                        
+                        completedJobs.forEach(job => {
+                            // Get job details to display streaming info
+                            fetch(getApiUrl(API_CONFIG.ENDPOINTS.JOB + '/' + job.jobId))
+                                .then(response => response.json())
+                                .then(jobDetails => {
+                                    if (jobDetails.streaming) {
+                                        const jobCard = document.createElement('div');
+                                        jobCard.className = 'job-card-small';
+                                        
+                                        const videoName = job.videoKey.split('/').pop() || 'Unknown';
+                                        
+                                        jobCard.innerHTML = `
+                                            <div class="job-header">
+                                                <div class="job-title">${videoName}</div>
+                                            </div>
+                                            <div class="job-actions">
+                                                <button class="action-button play-button" data-url="${jobDetails.streaming.masterPlaylist}">
+                                                    <i class="fas fa-play"></i> Play
+                                                </button>
+                                            </div>
+                                        `;
+                                        
+                                        // Add the job card to the list
+                                        jobsList.appendChild(jobCard);
+                                        
+                                        // Add click handler for the play button
+                                        const playButton = jobCard.querySelector('.play-button');
+                                        playButton.addEventListener('click', () => {
+                                            const url = playButton.getAttribute('data-url');
+                                            hlsUrlInput.value = url;
+                                            loadHlsStream(url);
+                                        });
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error fetching job details:', error);
+                                });
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error fetching jobs:', error);
+                        jobsList.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="fas fa-times-circle"></i>
+                                <span>Error loading jobs: ${error.message}</span>
+                            </div>
+                        `;
+                    });
+            }
+            
+            // Fetch jobs on page load
+            fetchJobs();
+            
+            // Highlight the Auto button by default
+            resolutionButtons[0].classList.add('active');
+        });
+    </script>
+</body>
+</html> 

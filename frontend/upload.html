@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Video - Video Processing System</title>
+    <!-- Include env.js first to set the API Base URL -->
+    <script src="env.js"></script>
+    <!-- Include config.js after env.js -->
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <header>
+        <div class="app-title">
+            <i class="fas fa-film"></i>
+            <span>Video Processing System</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="card" id="upload-section">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    Upload Video
+                </h2>
+                <div id="config-status"></div>
+            </div>
+
+            <div class="drop-zone" id="drop-zone">
+                <i class="fas fa-file-video"></i>
+                <p>Drag & drop video file here or click to browse</p>
+                <input type="file" id="file-input" style="display: none" accept="video/*">
+                <button class="button" id="browse-button">
+                    <i class="fas fa-folder-open"></i>
+                    Browse Files
+                </button>
+            </div>
+
+            <div id="upload-progress" style="display: none;">
+                <div class="progress-container">
+                    <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+                </div>
+                <div id="progress-text">0%</div>
+            </div>
+
+            <div id="upload-status" style="display: none;"></div>
+        </div>
+
+        <div class="card" id="transcoding-section" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-cogs"></i>
+                    Transcoding
+                </h2>
+            </div>
+
+            <div class="job-details-container" id="job-details">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Preparing to start transcoding...</span>
+                </div>
+            </div>
+
+            <div class="logs-container" id="log-container"></div>
+
+            <div class="job-actions">
+                <button class="button" id="start-transcoding-button">
+                    <i class="fas fa-play"></i>
+                    Start Transcoding
+                </button>
+                <button class="button outline" id="refresh-logs-button">
+                    <i class="fas fa-sync"></i>
+                    Refresh Logs
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check configuration
+            checkConfiguration();
+            
+            // Setup upload functionality
+            setupUploadFunctionality();
+        });
+
+        // Check if the API is configured
+        function checkConfiguration() {
+            fetch(getApiUrl(API_CONFIG.ENDPOINTS.CHECK_UPLOAD_READY))
+                .then(response => response.json())
+                .then(data => {
+                    const configStatus = document.getElementById('config-status');
+                    if (data.ready) {
+                        configStatus.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> System configured and ready</div>`;
+                    } else {
+                        configStatus.innerHTML = `<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> ${data.message} <a href="config.html">Configure now</a></div>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking configuration:', error);
+                    const configStatus = document.getElementById('config-status');
+                    configStatus.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error connecting to server. <a href="config.html">Check configuration</a></div>`;
+                });
+        }
+
+        // Setup file upload functionality
+        function setupUploadFunctionality() {
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('file-input');
+            const browseButton = document.getElementById('browse-button');
+            const uploadStatus = document.getElementById('upload-status');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const uploadProgress = document.getElementById('upload-progress');
+
+            // Browse button click
+            browseButton.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            // File selection
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length > 0) {
+                    uploadFile(fileInput.files[0]);
+                }
+            });
+
+            // Drag and drop events
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('drag-over');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+                if (e.dataTransfer.files.length > 0) {
+                    uploadFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            // File upload function
+            function uploadFile(file) {
+                if (!file.type.startsWith('video/')) {
+                    uploadStatus.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Only video files are allowed</div>`;
+                    uploadStatus.style.display = 'block';
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('video', file);
+
+                uploadStatus.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Uploading ${file.name}...</div>`;
+                uploadStatus.style.display = 'block';
+                uploadProgress.style.display = 'block';
+
+                // Create XHR request to track progress
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', getApiUrl(API_CONFIG.ENDPOINTS.UPLOAD), true);
+
+                // Track upload progress
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        const percentComplete = Math.round((event.loaded / event.total) * 100);
+                        progressBar.style.width = percentComplete + '%';
+                        progressText.textContent = percentComplete + '%';
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            console.log('Upload successful:', response);
+                            uploadStatus.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Upload successful! Video key: ${response.key}</div>`;
+
+                            // Show transcoding section
+                            document.getElementById('transcoding-section').style.display = 'block';
+                            document.getElementById('start-transcoding-button').setAttribute('data-video-key', response.key);
+
+                            // Setup transcoding functionality
+                            setupTranscodingFunctionality(response.key);
+                        } catch (error) {
+                            console.error('Error parsing response:', error);
+                            uploadStatus.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error processing server response</div>`;
+                        }
+                    } else {
+                        console.error('Upload failed', xhr.status, xhr.statusText);
+                        uploadStatus.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Upload failed: ${xhr.statusText}</div>`;
+                    }
+                };
+
+                xhr.onerror = () => {
+                    console.error('Upload error:', xhr.error);
+                    uploadStatus.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Upload failed: Network error</div>`;
+                };
+
+                xhr.send(formData);
+            }
+        }
+
+        // Setup transcoding functionality
+        function setupTranscodingFunctionality(videoKey) {
+            const startTranscodingButton = document.getElementById('start-transcoding-button');
+            const refreshLogsButton = document.getElementById('refresh-logs-button');
+            const logContainer = document.getElementById('log-container');
+            const jobDetails = document.getElementById('job-details');
+
+            startTranscodingButton.addEventListener('click', () => {
+                const videoKey = startTranscodingButton.getAttribute('data-video-key');
+                if (!videoKey) {
+                    jobDetails.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> No video key found</div>`;
+                    return;
+                }
+
+                startTranscoding(videoKey);
+            });
+
+            refreshLogsButton.addEventListener('click', () => {
+                const jobId = refreshLogsButton.getAttribute('data-job-id');
+                if (jobId) {
+                    fetchJobDetails(jobId);
+                }
+            });
+
+            // Start transcoding function
+            function startTranscoding(videoKey) {
+                jobDetails.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Starting transcoding job...</div>`;
+
+                fetch(getApiUrl(API_CONFIG.ENDPOINTS.TRANSCODE), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ videoKey, performanceLevel: 'standard' })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            jobDetails.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Transcoding started! Job ID: ${data.jobId}</div>`;
+                            refreshLogsButton.setAttribute('data-job-id', data.jobId);
+
+                            // Start polling for job status
+                            pollJobStatus(data.jobId);
+                        } else {
+                            jobDetails.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Failed to start transcoding: ${data.error}</div>`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error starting transcoding:', error);
+                        jobDetails.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error: ${error.message}</div>`;
+                    });
+            }
+
+            // Poll job status
+            function pollJobStatus(jobId) {
+                fetchJobDetails(jobId);
+                const interval = setInterval(() => {
+                    fetchJobDetails(jobId).then(job => {
+                        if (job && (job.status === 'COMPLETED' || job.status === 'FAILED')) {
+                            clearInterval(interval);
+
+                            if (job.status === 'COMPLETED') {
+                                // Show success message with link to view
+                                jobDetails.innerHTML += `
+                                    <div class="alert alert-success mt-2">
+                                        <i class="fas fa-check-circle"></i>
+                                        Transcoding completed! 
+                                        <a href="player.html?url=${encodeURIComponent(job.streaming?.masterPlaylist || '')}" class="alert-link">Watch Video</a>
+                                    </div>
+                                `;
+                            }
+                        }
+                    });
+                }, 5000);
+            }
+
+            // Fetch job details
+            function fetchJobDetails(jobId) {
+                return fetch(getApiUrl(API_CONFIG.ENDPOINTS.JOB + '/' + jobId))
+                    .then(response => response.json())
+                    .then(job => {
+                        // Update job details display
+                        updateJobDetailsDisplay(job);
+                        return job;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching job details:', error);
+                        return null;
+                    });
+            }
+
+            // Update job details display
+            function updateJobDetailsDisplay(job) {
+                // Update job status
+                let statusClass = '';
+                let statusIcon = '';
+
+                switch (job.status) {
+                    case 'PENDING':
+                        statusClass = 'alert-warning';
+                        statusIcon = 'clock';
+                        break;
+                    case 'RUNNING':
+                        statusClass = 'alert-info';
+                        statusIcon = 'spinner fa-spin';
+                        break;
+                    case 'COMPLETED':
+                        statusClass = 'alert-success';
+                        statusIcon = 'check-circle';
+                        break;
+                    case 'FAILED':
+                        statusClass = 'alert-danger';
+                        statusIcon = 'times-circle';
+                        break;
+                }
+
+                jobDetails.innerHTML = `
+                    <div class="alert ${statusClass}">
+                        <i class="fas fa-${statusIcon}"></i>
+                        <span>Job ${job.jobId} is ${job.status}</span>
+                    </div>
+                `;
+
+                // Update logs
+                logContainer.innerHTML = '';
+                if (job.logs && job.logs.length > 0) {
+                    job.logs.forEach(log => {
+                        const logLine = document.createElement('div');
+                        logLine.className = 'log-line';
+
+                        const timestamp = document.createElement('span');
+                        timestamp.className = 'log-timestamp';
+                        timestamp.textContent = new Date(log.timestamp).toLocaleTimeString();
+
+                        const message = document.createElement('span');
+                        message.className = 'log-message';
+                        message.textContent = log.message;
+
+                        logLine.appendChild(timestamp);
+                        logLine.appendChild(message);
+                        logContainer.appendChild(logLine);
+                    });
+
+                    // Auto-scroll to bottom
+                    logContainer.scrollTop = logContainer.scrollHeight;
+                }
+            }
+        }
+    </script>
+</body>
+</html> 

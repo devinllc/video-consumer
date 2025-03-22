@@ -1,16 +1,26 @@
-// API Configuration
+// Configuration for API endpoints
 window.API_CONFIG = {
-    // Base URL for API endpoints
-    // Change this when deploying to production
-    API_URL: 'http://13.235.75.73:3001',
+    // Base URL - will be set by env.js
+    BASE_URL: window.API_BASE_URL || '',
 
-    // API endpoints
+    // API Endpoints
     ENDPOINTS: {
+        // Configuration
+        CONFIG: '/api/config',
+        TEST_CONNECTION: '/api/test-connection',
+        TEST_S3: '/api/test-s3',
+        HEALTH: '/health',
+        CHECK_UPLOAD_READY: '/api/check-upload-ready',
+
+        // Upload and Transcoding
         UPLOAD: '/api/upload',
         TRANSCODE: '/api/start-transcoding',
+
+        // Jobs
         JOBS: '/api/jobs',
-        CONFIG: '/api/config',
-        TEST_CONNECTION: '/api/test-connection'
+        JOB: '/api/jobs',
+        IMPORT_JOBS: '/api/import-jobs',
+        CREATE_TEST_JOB: '/api/create-test-job'
     },
 
     // Default performance levels
@@ -30,7 +40,12 @@ window.API_CONFIG = {
     }
 };
 
-// Helper function to get full API URL
+// Helper function to get API URL
 window.getApiUrl = function (endpoint) {
-    return window.API_CONFIG.API_URL + endpoint;
-}; 
+    if (!window.API_CONFIG.BASE_URL) {
+        return endpoint;
+    }
+    return window.API_CONFIG.BASE_URL + endpoint;
+};
+
+console.log('API configuration loaded for:', window.API_CONFIG.BASE_URL); 

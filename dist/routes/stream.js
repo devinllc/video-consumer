@@ -16,7 +16,8 @@ router.get('/:fileType/:fileName', (req, res) => {
     let filePath;
     // Validate file type for security
     if (fileType !== 'm3u8' && fileType !== 'ts') {
-        return res.status(400).json({ error: 'Invalid file type requested' });
+        res.status(400).json({ error: 'Invalid file type requested' });
+        return;
     }
     // Determine the file path based on the file type
     if (fileType === 'm3u8') {
@@ -28,7 +29,8 @@ router.get('/:fileType/:fileName', (req, res) => {
     }
     // Check if file exists
     if (!fs_1.default.existsSync(filePath)) {
-        return res.status(404).json({ error: 'File not found' });
+        res.status(404).json({ error: 'File not found' });
+        return;
     }
     const stat = fs_1.default.statSync(filePath);
     const fileSize = stat.size;

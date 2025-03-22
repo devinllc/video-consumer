@@ -252,6 +252,54 @@ curl http://YOUR_EC2_IP:3001/api/config
 
 If these commands return responses but your frontend can't connect, it may be a CORS or configuration issue. 
 
+## S3 Bucket Setup
+
+If you see "Bucket was not found" when testing your connection:
+
+1. **Create the S3 bucket** using AWS CLI:
+   ```bash
+   aws s3 mb s3://YOUR-BUCKET-NAME --region YOUR-REGION
+   ```
+   Example: `aws s3 mb s3://trisha.vid.ip --region ap-south-1`
+
+2. **Set bucket policy** for public read access (if needed for streaming videos):
+   ```bash
+   aws s3api put-bucket-policy --bucket YOUR-BUCKET-NAME --policy '{
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": "*",
+         "Action": "s3:GetObject",
+         "Resource": "arn:aws:s3:::YOUR-BUCKET-NAME/*"
+       }
+     ]
+   }'
+   ```
+
+3. **Enable CORS** for browser access:
+   ```bash
+   aws s3api put-bucket-cors --bucket YOUR-BUCKET-NAME --cors-configuration '{
+     "CORSRules": [
+       {
+         "AllowedHeaders": ["*"],
+         "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+         "AllowedOrigins": ["*"],
+         "ExposeHeaders": []
+       }
+     ]
+   }'
+   ```
+
+4. **Test bucket permissions** with a small file:
+   ```bash
+   echo "Test file" > test.txt
+   aws s3 cp test.txt s3://YOUR-BUCKET-NAME/
+   aws s3 ls s3://YOUR-BUCKET-NAME/
+   ```
+
+After creating and configuring your bucket, return to the application configuration page and test the connection again.
+
 ## UPDATING THE AWS CONFIGURATION
 
 If you're having trouble saving your AWS configuration through the web interface (`http://13.235.75.73:3001/config.html`), follow these steps:

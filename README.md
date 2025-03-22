@@ -826,3 +826,350 @@ This URL will serve both the frontend interface and the backend API endpoints.
 - **Simplified configuration**: No need to update URLs when the EC2 IP changes
 - **Reduced latency**: Direct communication between frontend and backend
 - **Easier maintenance**: Only one server to manage
+
+# Video Transcoding Service Deployment Guide
+
+This guide provides comprehensive instructions for deploying and configuring the Video Transcoding Service on AWS EC2.
+
+## Table of Contents
+
+1. [Quick Start Guide](#quick-start-guide)
+2. [Deployment Options](#deployment-options)
+3. [EC2 Deployment](#ec2-deployment)
+4. [Configuration](#configuration)
+5. [Frontend Configuration](#frontend-configuration)
+6. [Error Handling](#error-handling)
+7. [Cost Management](#cost-management)
+8. [Maintenance](#maintenance)
+
+## Quick Start Guide
+
+These steps provide a fast way to get the service running:
+
+```bash
+# 1. Connect to your EC2 instance
+ssh -i your-key.pem ec2-user@YOUR_EC2_IP
+
+# 2. Install dependencies
+sudo yum update -y
+sudo yum install -y git nodejs npm
+
+# 3. Clone repository
+git clone https://github.com/devinllc/video-consumer.git
+cd video-consumer
+
+# 4. Install project dependencies
+npm install
+npm install -g pm2
+
+# 5. Build and start the application
+npm run build
+pm2 start dist/index.js --name video-backend
+```
+
+Access your application at: `http://YOUR_EC2_IP:3001`
+
+## Deployment Options
+
+### Option 1: Full-Stack on EC2 (Recommended for Simplicity)
+* Deploy both frontend and backend on the same EC2 instance
+* No CORS issues since both run on the same origin
+* Simplest configuration, but no CDN benefits
+
+### Option 2: Backend on EC2, Frontend on Vercel
+* Deploy backend on EC2 for transcoding capabilities
+* Host frontend on Vercel for CDN benefits
+* Requires CORS and proper API configuration
+
+### Option 3: Same as Option 2 with HTTPS
+* Use HTTPS for secure communication
+* Options include Nginx with Let's Encrypt or Ngrok for temporary solutions
+
+## EC2 Deployment
+
+### Prerequisites
+* Amazon EC2 instance (Amazon Linux 2023)
+* Security group with ports 22 (SSH) and 3001 (Application) open
+* SSH key pair
+
+### Instance Setup
+
+```bash
+# Update system packages
+sudo yum update -y
+
+# Install Node.js, Git, and other dependencies
+sudo yum install -y git nodejs npm
+
+# Clone repository
+git clone https://github.com/devinllc/video-consumer.git
+cd video-consumer
+
+# Install application dependencies
+npm install
+
+# Install PM2 for process management
+npm install -g pm2
+
+# Build the application
+npm run build
+
+# Start the application
+pm2 start dist/index.js --name video-backend
+
+# Configure PM2 to start on system boot
+pm2 startup
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user
+pm2 save
+
+# Check application status
+pm2 status
+```
+
+### Updating the Application
+
+```bash
+# Navigate to application directory
+cd ~/video-consumer
+
+# Pull latest changes (handle package-lock.json conflicts)
+git stash
+git pull origin main
+git stash pop
+
+# If conflicts occur in package-lock.json, you can force overwrite
+git checkout -- package-lock.json
+git pull origin main
+
+# Reinstall dependencies and rebuild
+npm install
+npm run build
+
+# Restart the application
+pm2 restart video-backend
+```
+
+## Configuration
+
+Once deployed, access the configuration page at: `http://YOUR_EC2_IP:3001/config.html`
+
+### Required AWS Configuration:
+1. **AWS Region**: The region where your AWS resources are located
+2. **AWS Access Key ID**: Your AWS access key
+3. **AWS Secret Access Key**: Your AWS secret key
+4. **S3 Bucket Name**: The S3 bucket for storing videos
+5. **ECS Cluster**: The ECS cluster for transcoding
+6. **ECS Task Definition**: Task definition for transcoding
+7. **ECS Subnets**: Comma-separated list of subnet IDs
+8. **ECS Security Groups**: Comma-separated list of security group IDs
+
+### Testing Configuration
+After saving your configuration, use the "Test Connection" button to verify:
+1. S3 connectivity
+2. ECS permissions
+3. EC2 subnet access
+4. Security group configuration
+
+## Frontend Configuration
+
+### Option 1: Same-Origin Deployment (Recommended)
+For same-origin deployment (frontend and backend on same EC2 instance):
+
+Edit `frontend-app/env.js`:
+```javascript
+// For same-origin requests
+const API_BASE_URL = '';  // Empty string means use the same origin
+```
+
+### Option 2: Cross-Origin Deployment
+For frontend on Vercel and backend on EC2:
+
+Edit `frontend-app/env.js`:
+```javascript
+// For cross-origin requests
+const API_BASE_URL = 'http://YOUR_EC2_IP:3001';
+```
+
+Then deploy to Vercel:
+```bash
+vercel login
+vercel
+```
+
+### Option 3: HTTPS Configuration
+For secure HTTPS connections:
+
+1. **Using Nginx with Let's Encrypt**:
+   ```bash
+   sudo amazon-linux-extras install nginx1
+   sudo yum install -y certbot python3-certbot-nginx
+   
+   # Configure Nginx as reverse proxy
+   sudo nano /etc/nginx/conf.d/video-consumer.conf
+   
+   # Add domain to Nginx and get certificate
+   sudo certbot --nginx -d yourdomain.com
+   ```
+
+2. **Using Ngrok for temporary HTTPS**:
+   ```bash
+   npm install -g ngrok
+   ngrok http 3001
+   ```
+   
+   Then update `frontend-app/env.js`:
+   ```javascript
+   const API_BASE_URL = 'https://your-ngrok-url.ngrok-free.app';
+   ```
+
+## Error Handling
+
+### Common Issues and Solutions
+
+#### 1. API Connection Errors
+
+**Symptom**: Frontend cannot connect to backend API
+**Solutions**:
+- Check if the EC2 instance is running: `pm2 status`
+- Verify security group allows port 3001 traffic
+- Check API_BASE_URL configuration in `frontend-app/env.js`
+- Test direct API access: `curl http://YOUR_EC2_IP:3001/health`
+
+#### 2. AWS Connection Issues
+
+**Symptom**: AWS credentials test fails
+**Solutions**:
+- Verify AWS credentials are correct
+- Check IAM permissions for S3, ECS, and EC2
+- Validate subnet and security group IDs
+- Check AWS region matches resources
+
+#### 3. Mixed Content Errors
+
+**Symptom**: Browser blocks HTTP requests from HTTPS frontend
+**Solutions**:
+- Implement HTTPS on EC2 instance
+- Use Ngrok for HTTPS tunneling
+- Configure same-origin deployment
+
+#### 4. Package Lock Conflicts
+
+**Symptom**: Git pull fails due to package-lock.json conflicts
+**Solutions**:
+```bash
+# Option 1: Discard local changes
+git checkout -- package-lock.json
+git pull origin main
+
+# Option 2: Stash and reapply
+git stash
+git pull origin main
+git stash pop
+```
+
+#### 5. PM2 Issues
+
+**Symptom**: Application doesn't stay running
+**Solutions**:
+```bash
+# Restart the application
+pm2 restart video-backend
+
+# Check logs for errors
+pm2 logs video-backend
+
+# Ensure PM2 starts on boot
+pm2 save
+pm2 startup
+```
+
+## Cost Management
+
+To minimize AWS costs:
+
+1. **AWS Free Tier Usage**:
+   - EC2: Use t2.micro or t3.micro instances (eligible for free tier)
+   - S3: Monitor usage to stay within free tier limits
+   - ECS: Choose FARGATE_SPOT for cost savings
+
+2. **EC2 Instance Management**:
+   - Stop EC2 instance when not in use:
+     ```bash
+     aws ec2 stop-instances --instance-ids YOUR_INSTANCE_ID
+     ```
+   - Start EC2 instance when needed:
+     ```bash
+     aws ec2 start-instances --instance-ids YOUR_INSTANCE_ID
+     ```
+
+3. **S3 Lifecycle Rules**:
+   - Configure lifecycle rules to automatically delete old files
+   - Use Storage Class options for cost optimization
+
+## Maintenance
+
+### Regular Updates
+
+1. **Updating Code**:
+```bash
+cd ~/video-consumer
+git pull origin main
+npm install
+npm run build
+pm2 restart video-backend
+```
+
+2. **Checking Application Health**:
+```bash
+# View application status
+pm2 status
+
+# Check for errors
+pm2 logs video-backend
+
+# Monitor system resources
+htop
+```
+
+3. **Backing Up Configuration**:
+```bash
+# Backup config.json file
+cp ~/video-consumer/dist/config.json ~/config-backup.json
+
+# Create a full application backup
+cd ~
+tar -czf video-consumer-backup.tar.gz video-consumer
+```
+
+4. **Security Updates**:
+```bash
+# Update system packages
+sudo yum update -y
+
+# Check for npm vulnerabilities
+npm audit
+npm audit fix
+```
+
+### Troubleshooting Commands
+
+```bash
+# Check if application is running
+pm2 status
+
+# View application logs
+pm2 logs video-backend
+
+# Test API endpoint
+curl http://localhost:3001/health
+
+# Restart application
+pm2 restart video-backend
+
+# View running processes on port 3001
+sudo netstat -tulpn | grep 3001
+
+# Check system resources
+free -m
+df -h
+```

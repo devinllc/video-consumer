@@ -10,7 +10,8 @@ window.API_CONFIG = {
         JOB: '/api/jobs',
         TEST_CONNECTION: '/api/test-connection',
         TEST_S3: '/api/test-s3',
-        HEALTH: '/health'
+        HEALTH: '/health',
+        CHECK_UPLOAD_READY: '/api/check-upload-ready'
     }
 };
 

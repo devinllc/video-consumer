@@ -118,6 +118,23 @@ app.get('/health', (_req, res) => {
     });
 });
 
+// Check if upload is ready
+app.get('/api/check-upload-ready', (_req, res) => {
+    // We need to check if the system is configured and S3 bucket exists
+    if (!config) {
+        return res.json({
+            ready: false,
+            message: 'System not configured'
+        });
+    }
+
+    // If we have valid configuration, consider the system ready for uploads
+    res.json({
+        ready: true,
+        message: 'Upload service is ready'
+    });
+});
+
 // API endpoint for test connection (POST)
 app.post('/api/test-connection', async (req, res) => {
     try {

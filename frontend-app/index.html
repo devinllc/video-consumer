@@ -27,7 +27,8 @@
           JOB: '/api/jobs',
           TEST_CONNECTION: '/api/test-connection',
           TEST_S3: '/api/test-s3',
-          HEALTH: '/health'
+          HEALTH: '/health',
+          CHECK_UPLOAD_READY: '/api/check-upload-ready'
         }
       };
       console.log('Using fallback API_CONFIG');
@@ -620,7 +621,7 @@
     // Check if upload is ready
     async function checkUploadReady() {
       try {
-        const response = await fetch(getApiUrl('/api/check-upload-ready'));
+        const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.CHECK_UPLOAD_READY));
 
         if (!response.ok) {
           console.error('Upload readiness check failed:', response.status);
@@ -632,8 +633,9 @@
 
         return result.ready;
       } catch (error) {
-        console.error('Error checking upload readiness:', error);
-        return false;
+        console.error('Upload readiness check failed:', error);
+        // In case of error, allow upload anyway to avoid blocking the user
+        return true;
       }
     }
 

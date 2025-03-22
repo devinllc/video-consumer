@@ -1,3 +1,28 @@
+# CRITICAL FIX FOR FILE UPLOADING ISSUE
+
+If you're getting the error:
+```
+GET http://13.235.75.73:3001/api/check-upload-ready 404 (Not Found)
+Upload readiness check failed: 404
+```
+
+We've added the missing endpoint to the backend. To apply this fix:
+
+```bash
+# 1. Connect to your EC2 instance
+ssh -i your-key.pem ec2-user@13.235.75.73
+
+# 2. Pull the latest changes
+cd ~/video-consumer
+git pull origin main
+
+# 3. Rebuild and restart
+npm run build
+pm2 restart video-backend
+```
+
+After restarting, refresh the browser and you should be able to upload files.
+
 # CRITICAL FIX FOR CONFIG.HTML LOCALHOST ERROR
 
 If you're still getting the `net::ERR_CONNECTION_REFUSED` error when trying to test/save configuration:

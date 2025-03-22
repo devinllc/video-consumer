@@ -214,6 +214,51 @@ Common issues and solutions:
 4. **Docker Build Errors**: Ensure Docker is running and has sufficient resources
 5. **Network Connectivity**: Verify security group rules allow necessary traffic
 
+### Connection Refused Errors
+
+If you're experiencing "Failed to load resource: net::ERR_CONNECTION_REFUSED" errors when accessing the configuration page or API endpoints, follow these steps:
+
+1. **Check API URL Configuration**: 
+   - Open `frontend-app/env.js` and verify that `API_BASE_URL` is set correctly:
+     - For same-origin deployment (frontend and backend on same server): Use empty string `""`
+     - For separate deployment: Use full URL including protocol, e.g., `"http://13.235.75.73:3001"`
+
+2. **Update the API URL manually**:
+   ```bash
+   # Connect to your EC2 instance
+   ssh -i your-key-file.pem ec2-user@your-ec2-ip
+   
+   # Navigate to the application directory
+   cd video-consumer
+   
+   # Edit the env.js file
+   nano frontend-app/env.js
+   
+   # Set API_BASE_URL to empty string for same-origin deployment:
+   # export const API_BASE_URL = '';
+   
+   # Save the file (Ctrl+O, Enter, Ctrl+X)
+   
+   # Restart the application
+   pm2 restart video-backend
+   ```
+
+3. **Verify browser console**: 
+   - Open your browser's developer tools (F12)
+   - Check the Console tab for network errors
+   - Verify the exact URLs being called with errors
+
+4. **Test direct API access**:
+   - Try accessing the API directly in your browser: `http://your-ec2-ip:3001/api/config`
+   - Test using curl from your EC2 instance: `curl http://localhost:3001/api/config`
+
+5. **Update Firewall Rules**:
+   - Ensure your EC2 security group allows inbound traffic on port 3001
+   - Check if any firewall on your EC2 instance is blocking connections
+
+6. **Check Server Logs**:
+   - Review PM2 logs for any backend errors: `pm2 logs video-backend`
+
 ## Additional Documentation
 
 For more detailed information, refer to:

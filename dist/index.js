@@ -15,17 +15,23 @@ const uuid_1 = require("uuid");
 const child_process_1 = require("child_process");
 const axios_1 = __importDefault(require("axios"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const stream_1 = __importDefault(require("./routes/stream"));
 const app = (0, express_1.default)();
 // Enable CORS for all routes
 app.use((0, cors_1.default)({
     origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'Accept', 'Origin', 'X-Requested-With'],
+    exposedHeaders: ['Content-Length', 'Content-Range', 'Content-Disposition', 'Accept-Ranges'],
+    credentials: true,
+    maxAge: 86400
 }));
 // Parse JSON bodies
 app.use(express_1.default.json());
 // Serve static files from the frontend directory
 app.use(express_1.default.static(path_1.default.join(__dirname, '../frontend')));
+// Register streaming routes
+app.use('/api/stream', stream_1.default);
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
     res.json({

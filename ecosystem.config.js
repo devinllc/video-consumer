@@ -9,10 +9,15 @@ module.exports = {
             max_memory_restart: '1G',
             env: {
                 NODE_ENV: 'production',
-                PORT: 3001
+                PORT: 3001,
+                CORS_ALLOW_ORIGIN: '*',
+                AWS_SDK_JS_SUPPRESS_MAINTENANCE_MODE_MESSAGE: '1'
             },
             // Optional merge logs with current timestamp
-            time: true
+            time: true,
+            // Restart after unexpected crashes
+            max_restarts: 10,
+            restart_delay: 5000
         }
     ]
-}; 
+};

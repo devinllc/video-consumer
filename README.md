@@ -1,3 +1,30 @@
+# Understanding Your Frontends
+
+## Which Frontend is Accessible on EC2?
+
+Your EC2 instance is serving the `frontend-app` directory. This is configured in `src/index.js`:
+
+```javascript
+// Serve static files from frontend-app directory
+app.use(express.static('frontend-app'));
+```
+
+### Frontend Directories in Your Project:
+
+1. **`frontend-app/`** (Active on EC2)
+   - Modern version with env.js for configuration
+   - Uses API_BASE_URL from env.js 
+   - Includes the config.html page for AWS configuration
+   - This is what users see when accessing http://13.235.75.73:3001
+
+2. **`frontend/`** (Not active)
+   - Older version
+   - Not currently being served
+
+If you want to switch frontends, you would need to modify the express.static line in src/index.js.
+
+---
+
 # QUICK UPDATE GUIDE FOR EC2
 
 If you're still having connection issues on your EC2 instance:

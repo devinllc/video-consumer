@@ -216,3 +216,38 @@ To minimize AWS costs:
      ```bash
      aws ec2 start-instances --instance-ids YOUR_INSTANCE_ID
      ``` 
+
+## Troubleshooting
+
+### API Connection Issues
+
+If you experience connection errors like `net::ERR_CONNECTION_REFUSED` or undefined API errors:
+
+1. Check that the API server is running with `pm2 status`
+2. Verify that `frontend-app/env.js` has the correct API URL:
+   ```js
+   window.API_BASE_URL = 'http://YOUR_EC2_IP:3001';
+   ```
+3. Make sure `frontend-app/config.js` is using the window object for API_BASE_URL:
+   ```js
+   BASE_URL: (typeof window.API_BASE_URL !== 'undefined' && window.API_BASE_URL !== '') ? window.API_BASE_URL : '',
+   ```
+4. Clear your browser cache or try in incognito mode
+5. Check browser console for specific error messages
+6. Verify that port 3001 is open in your EC2 security group
+
+### SSL Errors
+
+If you see SSL-related errors:
+1. Ensure you're using `http://` and not `https://` in your API_BASE_URL (unless you've configured SSL)
+2. Check for any Content-Security-Policy headers that might be blocking mixed content
+
+### Testing the API Connection
+
+Use curl to test API endpoints directly:
+```
+curl http://YOUR_EC2_IP:3001/health
+curl http://YOUR_EC2_IP:3001/api/config
+```
+
+If these commands return responses but your frontend can't connect, it may be a CORS or configuration issue. 

@@ -16,61 +16,16 @@ const app = express();
 
 // Enable CORS for all routes
 app.use(cors({
-    origin: function (origin, callback) {
-        // In development mode or when running on EC2, allow all origins
-        if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_ALL_ORIGINS === 'true') {
-            return callback(null, true);
-        }
-
-        // Allow requests with no origin (like mobile apps, curl, etc)
-        if (!origin) return callback(null, true);
-
-        // List of allowed origins
-        const allowedOrigins = [
-            'http://localhost:3000',
-            'http://localhost:3001',
-            'http://localhost:8080',
-            'http://127.0.0.1:3000',
-            'http://127.0.0.1:3001',
-            'http://127.0.0.1:8080'
-        ];
-
-        // Add EC2 public IP if available
-        if (process.env.EC2_PUBLIC_IP) {
-            allowedOrigins.push(`http://${process.env.EC2_PUBLIC_IP}:3001`);
-            // Also add without port for flexibility
-            allowedOrigins.push(`http://${process.env.EC2_PUBLIC_IP}`);
-        }
-
-        // Add custom frontend URL if specified in environment
-        if (process.env.FRONTEND_URL) {
-            allowedOrigins.push(process.env.FRONTEND_URL);
-        }
-
-        // Add Vercel domains
-        allowedOrigins.push('https://video-consumer.vercel.app');
-        allowedOrigins.push('https://video-consumer-git-main-trisha233.vercel.app');
-
-        console.log(`Checking CORS for origin: ${origin}`);
-        console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
-
-        // Check if origin is allowed
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            console.log(`Origin ${origin} not allowed by CORS`);
-            callback(null, false);
-        }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    origin: true, // Allow all origins for EC2 deployment
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 }));
 
 // Parse JSON bodies
 app.use(express.json());
 
-app.use(express.static(path.join(__dirname, '../frontend-app')));
+app.use(express.static('frontend'));
 
 // Ensure uploads directory exists (only in development)
 if (process.env.NODE_ENV !== 'production' && !fs.existsSync('uploads')) {

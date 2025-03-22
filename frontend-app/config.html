@@ -166,8 +166,8 @@
         document.addEventListener('DOMContentLoaded', async function () {
             // Load existing configuration
             try {
-                // Use direct URL with current origin for EC2 deployment
-                const apiUrl = window.location.origin + '/api/config';
+                // Use relative URL instead of window.location.origin
+                const apiUrl = '/api/config';
                 console.log('Fetching config from:', apiUrl);
 
                 const response = await fetch(apiUrl);
@@ -216,8 +216,8 @@
                 `;
 
                 try {
-                    // Use direct URL with current origin for EC2 deployment
-                    const apiUrl = window.location.origin + '/api/config';
+                    // Use relative URL instead of window.location.origin
+                    const apiUrl = '/api/config';
                     console.log('Sending config to:', apiUrl);
 
                     const response = await fetch(apiUrl, {
@@ -258,7 +258,7 @@
                             <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
                                     onclick="document.getElementById('debug-info').style.display='block'">Show Details</button>
                             <div id="debug-info" class="mt-2" style="display:none">
-                                <p>API URL: ${window.location.origin + '/api/config'}</p>
+                                <p>API URL: ${'/api/config'}</p>
                                 <p>Please check browser console for more details.</p>
                             </div>
                         </div>
@@ -281,8 +281,8 @@
 
             console.log('Testing connection with config:', config);
 
-            // Use direct URL with current origin for EC2 deployment
-            const apiUrl = window.location.origin + '/api/test-connection';
+            // Use relative URL instead of window.location.origin
+            const apiUrl = '/api/test-connection';
             console.log('Sending test to:', apiUrl);
 
             fetch(apiUrl, {
@@ -331,18 +331,18 @@
                     }
 
                     alertDiv.innerHTML = `
-                    <div class="alert alert-danger">
-                        <h5>Connection Test Failed</h5>
-                        <p>${errorMessage}</p>
-                        ${details ? `<p><strong>Suggestion:</strong> ${details}</p>` : ''}
-                        <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
-                                onclick="document.getElementById('test-debug-info').style.display='block'">Show Details</button>
-                        <div id="test-debug-info" class="mt-2" style="display:none">
-                            <p>API URL: ${window.location.origin + '/api/test-connection'}</p>
-                            <p>Please check browser console for more details.</p>
-                        </div>
+                <div class="alert alert-danger">
+                    <h5>Connection Test Failed</h5>
+                    <p>${errorMessage}</p>
+                    ${details ? `<p><strong>Suggestion:</strong> ${details}</p>` : ''}
+                    <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
+                            onclick="document.getElementById('test-debug-info').style.display='block'">Show Details</button>
+                    <div id="test-debug-info" class="mt-2" style="display:none">
+                        <p>API URL: ${'/api/test-connection'}</p>
+                        <p>Please check browser console for more details.</p>
                     </div>
-                `;
+                </div>
+            `;
                 });
         }
     </script>

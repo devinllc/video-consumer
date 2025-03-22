@@ -166,8 +166,8 @@
         document.addEventListener('DOMContentLoaded', async function () {
             // Load existing configuration
             try {
-                // Use relative URL instead of window.location.origin
-                const apiUrl = '/api/config';
+                // Use the API_CONFIG to construct the URL
+                const apiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.CONFIG);
                 console.log('Fetching config from:', apiUrl);
 
                 const response = await fetch(apiUrl);
@@ -267,83 +267,76 @@
             });
         });
 
-        function testConnection() {
-            const config = {
-                AWS_REGION: document.getElementById('awsRegion').value,
-                AWS_ACCESS_KEY_ID: document.getElementById('awsAccessKeyId').value,
-                AWS_SECRET_ACCESS_KEY: document.getElementById('awsSecretKey').value,
-                S3_BUCKET_NAME: document.getElementById('s3BucketName').value,
-                ECS_CLUSTER: document.getElementById('ecsCluster').value,
-                ECS_TASK_DEFINITION: document.getElementById('ecsTaskDefinition').value,
-                ECS_SUBNETS: document.getElementById('ecsSubnets').value,
-                ECS_SECURITY_GROUPS: document.getElementById('ecsSecurityGroups').value
-            };
+        async function testConnection() {
+            const form = document.getElementById('configForm');
+            const formData = new FormData(form);
+            const configData = {};
+            formData.forEach((value, key) => {
+                configData[key] = value;
+            });
 
-            console.log('Testing connection with config:', config);
-
-            // Use relative URL instead of window.location.origin
-            const apiUrl = '/api/test-connection';
-            console.log('Sending test to:', apiUrl);
-
-            fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(config)
-            })
-                .then(response => response.json())
-                .then(data => {
-                    const alertDiv = document.getElementById('alert');
-                    if (data.success) {
-                        let message = `<h5>Connection Test Successful</h5>`;
-                        message += `<p>Successfully connected to S3 in region: ${data.region}</p>`;
-
-                        if (data.bucketExists) {
-                            message += `<p class="text-success">✓ Bucket "${data.bucketName}" exists</p>`;
-                        } else {
-                            message += `<p class="text-warning">⚠️ Bucket "${data.bucketName}" was not found. Make sure it exists or create it.</p>`;
-                        }
-
-                        alertDiv.innerHTML = `<div class="alert alert-success">${message}</div>`;
-                    } else {
-                        throw new Error(data.error || 'Connection test failed');
-                    }
-                })
-                .catch(error => {
-                    console.error('Test connection error:', error);
-
-                    // Create a more helpful error message
-                    let errorMessage = error.message || 'Connection test failed';
-                    let details = '';
-
-                    // Add helpful hints based on error message
-                    if (errorMessage.includes('AccessDenied')) {
-                        details = 'Check that your AWS credentials have the necessary S3 permissions.';
-                    } else if (errorMessage.includes('InvalidAccessKeyId')) {
-                        details = 'Your AWS Access Key ID is invalid. Double-check your credentials.';
-                    } else if (errorMessage.includes('SignatureDoesNotMatch')) {
-                        details = 'Your AWS Secret Access Key is invalid. Double-check your credentials.';
-                    } else if (errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch')) {
-                        details = 'Network error. Check your internet connection and verify that the API URL is correct.';
-                    } else if (errorMessage.includes('region')) {
-                        details = 'Invalid AWS region. Make sure you specified a valid region like "us-east-1".';
-                    }
-
-                    alertDiv.innerHTML = `
-                <div class="alert alert-danger">
-                    <h5>Connection Test Failed</h5>
-                    <p>${errorMessage}</p>
-                    ${details ? `<p><strong>Suggestion:</strong> ${details}</p>` : ''}
-                    <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
-                            onclick="document.getElementById('test-debug-info').style.display='block'">Show Details</button>
-                    <div id="test-debug-info" class="mt-2" style="display:none">
-                        <p>API URL: ${'/api/test-connection'}</p>
-                        <p>Please check browser console for more details.</p>
-                    </div>
-                </div>
-            `;
+            try {
+                const testApiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.TEST_CONNECTION);
+                console.log('Testing connection with:', testApiUrl);
+                const response = await fetch(testApiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(configData)
                 });
+
+                const data = await response.json();
+
+                const alertDiv = document.getElementById('alert');
+                if (data.success) {
+                    let message = `<h5>Connection Test Successful</h5>`;
+                    message += `<p>Successfully connected to S3 in region: ${data.region}</p>`;
+
+                    if (data.bucketExists) {
+                        message += `<p class="text-success">✓ Bucket "${data.bucketName}" exists</p>`;
+                    } else {
+                        message += `<p class="text-warning">⚠️ Bucket "${data.bucketName}" was not found. Make sure it exists or create it.</p>`;
+                    }
+
+                    alertDiv.innerHTML = `<div class="alert alert-success">${message}</div>`;
+                } else {
+                    throw new Error(data.error || 'Connection test failed');
+                }
+            } catch (error) {
+                console.error('Test connection error:', error);
+
+                // Create a more helpful error message
+                let errorMessage = error.message || 'Connection test failed';
+                let details = '';
+
+                // Add helpful hints based on error message
+                if (errorMessage.includes('AccessDenied')) {
+                    details = 'Check that your AWS credentials have the necessary S3 permissions.';
+                } else if (errorMessage.includes('InvalidAccessKeyId')) {
+                    details = 'Your AWS Access Key ID is invalid. Double-check your credentials.';
+                } else if (errorMessage.includes('SignatureDoesNotMatch')) {
+                    details = 'Your AWS Secret Access Key is invalid. Double-check your credentials.';
+                } else if (errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch')) {
+                    details = 'Network error. Check your internet connection and verify that the API URL is correct.';
+                } else if (errorMessage.includes('region')) {
+                    details = 'Invalid AWS region. Make sure you specified a valid region like "us-east-1".';
+                }
+
+                alertDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5>Connection Test Failed</h5>
+                        <p>${errorMessage}</p>
+                        ${details ? `<p><strong>Suggestion:</strong> ${details}</p>` : ''}
+                        <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
+                                onclick="document.getElementById('test-debug-info').style.display='block'">Show Details</button>
+                        <div id="test-debug-info" class="mt-2" style="display:none">
+                            <p>API URL: ${'/api/test-connection'}</p>
+                            <p>Please check browser console for more details.</p>
+                        </div>
+                    </div>
+                `;
+            }
         }
     </script>
 </body>

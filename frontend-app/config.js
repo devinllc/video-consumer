@@ -1,7 +1,7 @@
 // API configuration
 window.API_CONFIG = {
     // If API_BASE_URL is set in env.js, use that; otherwise fall back to current origin
-    BASE_URL: typeof API_BASE_URL !== 'undefined' && API_BASE_URL !== '' ? API_BASE_URL : '',
+    BASE_URL: (typeof window.API_BASE_URL !== 'undefined' && window.API_BASE_URL !== '') ? window.API_BASE_URL : '',
     ENDPOINTS: {
         UPLOAD: '/api/upload',
         TRANSCODE: '/api/start-transcoding',
@@ -25,7 +25,7 @@ window.getApiUrl = function (endpoint) {
 };
 
 // Log the configuration
-console.log('API Configuration loaded', window.API_CONFIG.BASE_URL ? 'with base URL' : 'using same origin');
+console.log('API Configuration loaded', window.API_CONFIG.BASE_URL ? 'with base URL: ' + window.API_CONFIG.BASE_URL : 'using same origin');
 
 // Default performance levels
 window.API_CONFIG.PERFORMANCE_LEVELS = {

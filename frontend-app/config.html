@@ -4,9 +4,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+    <!-- Remove Content-Security-Policy that's causing SSL errors -->
+    <!-- <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests"> -->
     <title>Video Processing System - Configuration</title>
     <!-- Include env.js first to set the API Base URL -->
+    <script>
+        // Fallback API configuration in case env.js or config.js fails to load
+        if (typeof window.API_BASE_URL === 'undefined') {
+            window.API_BASE_URL = 'http://13.235.75.73:3001';
+            console.log('Using fallback API_BASE_URL:', window.API_BASE_URL);
+        }
+
+        // Create fallback API_CONFIG if config.js fails to load
+        if (typeof window.API_CONFIG === 'undefined') {
+            window.API_CONFIG = {
+                BASE_URL: window.API_BASE_URL || '',
+                ENDPOINTS: {
+                    UPLOAD: '/api/upload',
+                    TRANSCODE: '/api/start-transcoding',
+                    CONFIG: '/api/config',
+                    JOBS: '/api/jobs',
+                    JOB: '/api/jobs',
+                    TEST_CONNECTION: '/api/test-connection',
+                    TEST_S3: '/api/test-s3',
+                    HEALTH: '/health'
+                }
+            };
+            console.log('Using fallback API_CONFIG');
+        }
+
+        // Create fallback getApiUrl function if config.js fails to load
+        if (typeof window.getApiUrl === 'undefined') {
+            window.getApiUrl = function (endpoint) {
+                if (!window.API_CONFIG.BASE_URL) {
+                    return endpoint;
+                }
+                return window.API_CONFIG.BASE_URL + endpoint;
+            };
+            console.log('Using fallback getApiUrl function');
+        }
+    </script>
     <script src="env.js"></script>
     <script src="config.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -163,16 +200,25 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Make sure alertDiv is defined globally
+        const alertDiv = document.getElementById('alert');
+
         document.addEventListener('DOMContentLoaded', async function () {
             // Debug API configuration
             console.log('API CONFIG:', window.API_CONFIG);
-            console.log('API Base URL:', window.API_CONFIG.BASE_URL);
+            console.log('API Base URL:', window.API_CONFIG ? window.API_CONFIG.BASE_URL : 'undefined');
             console.log('Using getApiUrl function:', typeof window.getApiUrl);
 
-            // Load existing configuration
             try {
-                // Use the API_CONFIG to construct the URL
-                const apiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.CONFIG);
+                // Use direct API URL as fallback if API_CONFIG is not defined
+                let apiUrl = '/api/config';
+                try {
+                    apiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.CONFIG);
+                } catch (error) {
+                    console.error('Error constructing API URL:', error);
+                    apiUrl = window.API_BASE_URL ? window.API_BASE_URL + '/api/config' : '/api/config';
+                }
+
                 console.log('Fetching config from:', apiUrl);
 
                 const response = await fetch(apiUrl);
@@ -189,7 +235,8 @@
                     document.getElementById('ecsSubnets').value = data.config.ECS_SUBNETS || '';
                     document.getElementById('ecsSecurityGroups').value = data.config.ECS_SECURITY_GROUPS || '';
 
-                    document.getElementById('alert').innerHTML = `
+                    alertDiv.style.display = 'block';
+                    alertDiv.innerHTML = `
                         <div class="alert alert-success">
                             Configuration loaded successfully
                         </div>
@@ -197,9 +244,12 @@
                 }
             } catch (error) {
                 console.error('Error loading configuration:', error);
-                document.getElementById('alert').innerHTML = `
+                alertDiv.style.display = 'block';
+                alertDiv.innerHTML = `
                     <div class="alert alert-danger">
                         Error loading configuration: ${error.message}
+                        <br>
+                        <small>Try accessing the page with http instead of https</small>
                     </div>
                 `;
             }
@@ -212,7 +262,6 @@
                 const formData = new FormData(this);
                 const config = Object.fromEntries(formData.entries());
 
-                const alertDiv = document.getElementById('alert');
                 alertDiv.style.display = 'block';
                 alertDiv.innerHTML = `
                     <div class="alert alert-info">
@@ -221,8 +270,15 @@
                 `;
 
                 try {
-                    // Use API_CONFIG to construct the URL
-                    const apiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.CONFIG);
+                    // Use direct URL as fallback if API_CONFIG is not defined
+                    let apiUrl = '/api/config';
+                    try {
+                        apiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.CONFIG);
+                    } catch (error) {
+                        console.error('Error constructing API URL:', error);
+                        apiUrl = window.API_BASE_URL ? window.API_BASE_URL + '/api/config' : '/api/config';
+                    }
+
                     console.log('Sending config to:', apiUrl);
 
                     const response = await fetch(apiUrl, {
@@ -263,7 +319,7 @@
                             <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
                                     onclick="document.getElementById('debug-info').style.display='block'">Show Details</button>
                             <div id="debug-info" class="mt-2" style="display:none">
-                                <p>API URL: ${apiUrl}</p>
+                                <p>API URL: ${window.API_BASE_URL || 'same origin'}</p>
                                 <p>Please check browser console for more details.</p>
                             </div>
                         </div>
@@ -280,8 +336,20 @@
                 configData[key] = value;
             });
 
+            // Make sure alertDiv is accessible
+            const alertDiv = document.getElementById('alert');
+            alertDiv.style.display = 'block';
+
             try {
-                const testApiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.TEST_CONNECTION);
+                // Use direct URL as fallback if API_CONFIG is not defined
+                let testApiUrl = '/api/test-connection';
+                try {
+                    testApiUrl = window.getApiUrl(window.API_CONFIG.ENDPOINTS.TEST_CONNECTION);
+                } catch (error) {
+                    console.error('Error constructing test API URL:', error);
+                    testApiUrl = window.API_BASE_URL ? window.API_BASE_URL + '/api/test-connection' : '/api/test-connection';
+                }
+
                 console.log('Testing connection with:', testApiUrl);
                 const response = await fetch(testApiUrl, {
                     method: 'POST',
@@ -293,7 +361,6 @@
 
                 const data = await response.json();
 
-                const alertDiv = document.getElementById('alert');
                 if (data.success) {
                     let message = `<h5>Connection Test Successful</h5>`;
                     message += `<p>Successfully connected to S3 in region: ${data.region}</p>`;
@@ -336,8 +403,9 @@
                         <button type="button" class="btn btn-sm btn-outline-danger mt-2" 
                                 onclick="document.getElementById('test-debug-info').style.display='block'">Show Details</button>
                         <div id="test-debug-info" class="mt-2" style="display:none">
-                            <p>API URL: ${'/api/test-connection'}</p>
-                            <p>Please check browser console for more details.</p>
+                            <p>Current URL: ${window.location.href}</p>
+                            <p>API URL: ${window.API_BASE_URL || 'same origin'}</p>
+                            <p>Try accessing page with HTTP instead of HTTPS.</p>
                         </div>
                     </div>
                 `;

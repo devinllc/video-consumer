@@ -4,8 +4,46 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <!-- Remove Content-Security-Policy that's causing SSL errors -->
+  <!-- <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests"> -->
   <title>Video Processing System</title>
+  <!-- Fallback configuration in case scripts fail to load -->
+  <script>
+    // Fallback API configuration in case env.js or config.js fails to load
+    if (typeof window.API_BASE_URL === 'undefined') {
+      window.API_BASE_URL = 'http://13.235.75.73:3001';
+      console.log('Using fallback API_BASE_URL:', window.API_BASE_URL);
+    }
+
+    // Create fallback API_CONFIG if config.js fails to load
+    if (typeof window.API_CONFIG === 'undefined') {
+      window.API_CONFIG = {
+        BASE_URL: window.API_BASE_URL || '',
+        ENDPOINTS: {
+          UPLOAD: '/api/upload',
+          TRANSCODE: '/api/start-transcoding',
+          CONFIG: '/api/config',
+          JOBS: '/api/jobs',
+          JOB: '/api/jobs',
+          TEST_CONNECTION: '/api/test-connection',
+          TEST_S3: '/api/test-s3',
+          HEALTH: '/health'
+        }
+      };
+      console.log('Using fallback API_CONFIG');
+    }
+
+    // Create fallback getApiUrl function if config.js fails to load
+    if (typeof window.getApiUrl === 'undefined') {
+      window.getApiUrl = function (endpoint) {
+        if (!window.API_CONFIG.BASE_URL) {
+          return endpoint;
+        }
+        return window.API_CONFIG.BASE_URL + endpoint;
+      };
+      console.log('Using fallback getApiUrl function');
+    }
+  </script>
   <!-- Include env.js first to set the API Base URL -->
   <script src="env.js"></script>
   <!-- Include config.js after env.js -->

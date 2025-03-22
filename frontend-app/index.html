@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
   <title>Video Processing System</title>
   <!-- Include env.js first to set the API Base URL -->
   <script src="env.js"></script>
@@ -433,20 +434,37 @@
     async function updateJobs() {
       try {
         const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.JOBS));
-        const jobs = await response.json();
+        const data = await response.json();
+        const jobs = data.jobs || [];
 
         const jobsList = document.getElementById('jobsList');
         jobsList.innerHTML = '';
 
+        if (jobs.length === 0) {
+          jobsList.innerHTML = '<div class="alert alert-info">No active jobs found</div>';
+          return;
+        }
+
         for (const job of jobs) {
           const jobCard = document.createElement('div');
-          jobCard.className = 'job-card';
+          jobCard.className = 'job-card mb-4 p-3 border rounded';
+
+          const isProductionMode = job.taskArn === 'production-mode-task-arn';
 
           jobCard.innerHTML = `
-            <div class="job-status status-${job.status}">Status: ${job.status}</div>
+            <div class="d-flex justify-content-between">
+              <h5>Job ID: ${job.jobId}</h5>
+              <span class="badge bg-${getStatusBadgeColor(job.status)}">${job.status}</span>
+            </div>
             <div>Video: ${job.videoKey}</div>
             <div>Started: ${new Date(job.startTime).toLocaleString()}</div>
-            <div class="job-logs" id="logs-${job.jobId}">Loading logs...</div>
+            ${isProductionMode ?
+              `<div class="alert alert-warning mt-2">
+                <strong>Production Mode:</strong> In Vercel's environment, transcoding is simulated. 
+                For actual video processing, you would need to run this application on a server.
+              </div>` : ''}
+            <h6 class="mt-3">Logs:</h6>
+            <pre class="job-logs p-2 bg-light" id="logs-${job.jobId}">Loading logs...</pre>
           `;
 
           jobsList.appendChild(jobCard);
@@ -461,6 +479,18 @@
         }
       } catch (error) {
         console.error('Error updating jobs:', error);
+        const jobsList = document.getElementById('jobsList');
+        jobsList.innerHTML = `<div class="alert alert-danger">Error loading jobs: ${error.message}</div>`;
+      }
+    }
+
+    function getStatusBadgeColor(status) {
+      switch (status) {
+        case 'PENDING': return 'secondary';
+        case 'RUNNING': return 'primary';
+        case 'COMPLETED': return 'success';
+        case 'FAILED': return 'danger';
+        default: return 'info';
       }
     }
 
@@ -686,6 +716,10 @@
             Successfully started transcoding job!<br>
             Job ID: ${result.jobId}<br>
             ${result.taskArn ? `Task ARN: ${result.taskArn}` : ''}
+            ${result.taskArn === 'production-mode-task-arn' ?
+            `<p class="mt-2"><strong>Note:</strong> This is running in production mode on Vercel. 
+              In this environment, transcoding jobs are simulated and not actually run due to serverless limitations.
+              For actual video transcoding, you would need to run this on a server or use AWS Lambda.</p>` : ''}
           </div>
         `;
 

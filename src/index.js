@@ -330,8 +330,8 @@ app.post('/api/start-transcoding', async (req, res) => {
             message: 'Transcoding job started'
         });
 
-        // Update job status to simulate task progress
-        simulateTranscodingTask(jobId, videoKey, performanceLevel);
+        // Start the actual ECS task for transcoding
+        startActualTranscoding(jobId, videoKey, performanceLevel);
 
     } catch (error) {
         console.error('Error starting transcoding:', error);
@@ -339,64 +339,216 @@ app.post('/api/start-transcoding', async (req, res) => {
     }
 });
 
-// Function to simulate a transcoding task
-function simulateTranscodingTask(jobId, videoKey, performanceLevel = 'standard') {
+// Function to start the actual transcoding process using ECS
+async function startActualTranscoding(jobId, videoKey, performanceLevel = 'standard') {
     const job = activeJobs.get(jobId);
     if (!job) return;
 
-    // Update job status
-    job.status = 'RUNNING';
-    job.logs.push({
-        timestamp: new Date().toISOString(),
-        message: 'Task status changed to RUNNING'
-    });
-
-    // Determine duration based on performance level
-    let duration = 60000; // Default 60 seconds for standard
-    if (performanceLevel === 'economy') {
-        duration = 90000; // 90 seconds for economy
-    } else if (performanceLevel === 'premium') {
-        duration = 30000; // 30 seconds for premium
-    }
-
-    // Add some simulated logs
-    setTimeout(() => {
+    try {
+        // Update job status
+        job.status = 'RUNNING';
         job.logs.push({
             timestamp: new Date().toISOString(),
-            message: `[Container] Downloaded original video successfully from S3: ${videoKey}`
+            message: 'Task status changed to RUNNING'
         });
-    }, 5000);
 
-    setTimeout(() => {
-        job.logs.push({
-            timestamp: new Date().toISOString(),
-            message: `[Container] Starting transcoding process with ffmpeg...`
+        // Initialize ECS client
+        const ecsClient = new ECSClient({
+            region: config.AWS_REGION,
+            credentials: {
+                accessKeyId: config.AWS_ACCESS_KEY_ID,
+                secretAccessKey: config.AWS_SECRET_ACCESS_KEY
+            }
         });
-    }, 10000);
 
-    // Add progress updates
-    const intervals = [0.2, 0.4, 0.6, 0.8];
-    intervals.forEach((interval, index) => {
-        setTimeout(() => {
+        // Determine the task definition based on performance level
+        let taskDefinition = config.ECS_TASK_DEFINITION;
+
+        // Start ECS task
+        const command = new RunTaskCommand({
+            cluster: config.ECS_CLUSTER,
+            taskDefinition: taskDefinition,
+            launchType: 'FARGATE',
+            networkConfiguration: {
+                awsvpcConfiguration: {
+                    subnets: config.ECS_SUBNETS.split(','),
+                    securityGroups: config.ECS_SECURITY_GROUPS.split(','),
+                    assignPublicIp: 'ENABLED'
+                }
+            },
+            overrides: {
+                containerOverrides: [{
+                    name: 'video-transcoder',
+                    environment: [
+                        { name: 'AWS_ACCESS_KEY_ID', value: config.AWS_ACCESS_KEY_ID },
+                        { name: 'AWS_SECRET_ACCESS_KEY', value: config.AWS_SECRET_ACCESS_KEY },
+                        { name: 'AWS_REGION', value: config.AWS_REGION },
+                        { name: 'BUCKET_NAME', value: config.S3_BUCKET_NAME },
+                        { name: 'KEY', value: videoKey },
+                        { name: 'PERFORMANCE_LEVEL', value: performanceLevel }
+                    ]
+                }]
+            }
+        });
+
+        const response = await ecsClient.send(command);
+        console.log('Started ECS task:', response);
+
+        if (response.tasks && response.tasks.length > 0) {
+            // Store the task ARN for monitoring
+            job.taskArn = response.tasks[0].taskArn;
             job.logs.push({
                 timestamp: new Date().toISOString(),
-                message: `[Container] Transcoding progress: ${Math.round(interval * 100)}%`
+                message: `Started ECS task: ${job.taskArn}`
             });
-        }, duration * interval);
-    });
 
-    // Complete the job after the duration
-    setTimeout(() => {
-        job.status = 'COMPLETED';
+            // Monitor the ECS task
+            monitorEcsTask(jobId, job.taskArn);
+        } else {
+            // Handle case where no tasks were created
+            job.status = 'FAILED';
+            job.logs.push({
+                timestamp: new Date().toISOString(),
+                message: 'Failed to start ECS task: No tasks were created'
+            });
+            console.error('No tasks were created by ECS');
+        }
+    } catch (error) {
+        console.error('Error starting ECS task:', error);
+        job.status = 'FAILED';
         job.logs.push({
             timestamp: new Date().toISOString(),
-            message: 'Task status changed to COMPLETED'
+            message: `Failed to start ECS task: ${error.message}`
+        });
+    }
+}
+
+// Function to monitor an ECS task
+async function monitorEcsTask(jobId, taskArn) {
+    const job = activeJobs.get(jobId);
+    if (!job) return;
+
+    try {
+        // Initialize ECS client
+        const ecsClient = new ECSClient({
+            region: config.AWS_REGION,
+            credentials: {
+                accessKeyId: config.AWS_ACCESS_KEY_ID,
+                secretAccessKey: config.AWS_SECRET_ACCESS_KEY
+            }
+        });
+
+        // Get task details
+        const command = new DescribeTasksCommand({
+            cluster: config.ECS_CLUSTER,
+            tasks: [taskArn]
+        });
+
+        const response = await ecsClient.send(command);
+        const task = response.tasks?.[0];
+
+        if (task) {
+            console.log(`Task ${taskArn} status:`, task.lastStatus);
+
+            // Add log entry for status changes
+            job.logs.push({
+                timestamp: new Date().toISOString(),
+                message: `Task status: ${task.lastStatus}`
+            });
+
+            // If there are task stopped reason, log it
+            if (task.stoppedReason) {
+                job.logs.push({
+                    timestamp: new Date().toISOString(),
+                    message: `Task stopped reason: ${task.stoppedReason}`
+                });
+            }
+
+            // Log container status details
+            task.containers?.forEach(container => {
+                if (container.reason) {
+                    job.logs.push({
+                        timestamp: new Date().toISOString(),
+                        message: `Container reason: ${container.reason}`
+                    });
+                }
+            });
+
+            if (task.lastStatus === 'STOPPED') {
+                // Determine if task completed successfully or failed
+                if (task.stopCode === 'EssentialContainerExited') {
+                    const container = task.containers?.[0];
+                    if (container?.exitCode === 0) {
+                        job.status = 'COMPLETED';
+                        job.logs.push({
+                            timestamp: new Date().toISOString(),
+                            message: 'Task status changed to COMPLETED'
+                        });
+                        console.log(`Job ${jobId} completed successfully`);
+                    } else {
+                        job.status = 'FAILED';
+                        job.logs.push({
+                            timestamp: new Date().toISOString(),
+                            message: `Task failed with exit code ${container?.exitCode}`
+                        });
+                        console.log(`Job ${jobId} failed with exit code ${container?.exitCode}`);
+                    }
+                } else {
+                    job.status = 'FAILED';
+                    job.logs.push({
+                        timestamp: new Date().toISOString(),
+                        message: `Task failed with stop code ${task.stopCode}`
+                    });
+                    console.log(`Job ${jobId} failed with stop code ${task.stopCode}`);
+                }
+            } else if (task.lastStatus === 'RUNNING' ||
+                task.lastStatus === 'PROVISIONING' ||
+                task.lastStatus === 'PENDING') {
+                // Continue monitoring for these states
+                job.status = 'RUNNING';
+
+                // Add progress information
+                if (task.lastStatus === 'RUNNING') {
+                    // Check if we already added information about the task running
+                    if (!job.notifiedRunning) {
+                        job.logs.push({
+                            timestamp: new Date().toISOString(),
+                            message: 'Task is now running and processing your video'
+                        });
+                        job.notifiedRunning = true;
+                    }
+                }
+
+                // Check again in 15 seconds
+                setTimeout(() => monitorEcsTask(jobId, taskArn), 15000);
+            } else {
+                console.log(`Task ${taskArn} in state:`, task.lastStatus);
+                // Continue monitoring for any other state
+                setTimeout(() => monitorEcsTask(jobId, taskArn), 15000);
+            }
+        } else {
+            console.log(`Task ${taskArn} not found`);
+            job.status = 'FAILED';
+            job.logs.push({
+                timestamp: new Date().toISOString(),
+                message: 'Task not found. It may have been deleted or failed to start.'
+            });
+        }
+    } catch (error) {
+        console.error('Error monitoring ECS task:', error);
+        // Don't mark the job as failed if we can't monitor it
+        // It might still be running correctly
+        job.logs.push({
+            timestamp: new Date().toISOString(),
+            message: `Error monitoring task: ${error.message}`
         });
         job.logs.push({
             timestamp: new Date().toISOString(),
-            message: `[Container] Transcoding completed. Generated HLS files for video: ${videoKey}`
+            message: 'The task may still be running correctly. Please check your AWS ECS console.'
         });
-    }, duration);
+
+        // Stop monitoring to prevent logs filled with the same error
+    }
 }
 
 // API endpoint to get job status and logs

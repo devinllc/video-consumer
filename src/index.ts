@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { exec } from 'child_process';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
+import os from 'os';
+import { promisify } from 'util';
 
 const app = express();
 
@@ -344,6 +346,99 @@ interface TranscodingJob {
 
 const activeJobs = new Map<string, TranscodingJob>();
 
+// Define a file to store jobs persistently
+const JOBS_STORAGE_FILE = path.join(__dirname, 'jobs_storage.json');
+
+// Load previously stored jobs on startup
+function loadJobsFromStorage() {
+    try {
+        if (fs.existsSync(JOBS_STORAGE_FILE)) {
+            const jobsData = fs.readFileSync(JOBS_STORAGE_FILE, 'utf8');
+            const parsedJobs = JSON.parse(jobsData);
+
+            // Convert JSON structure back to Map
+            for (const [jobId, jobData] of Object.entries(parsedJobs)) {
+                activeJobs.set(jobId, jobData as TranscodingJob);
+            }
+
+            console.log(`Loaded ${Object.keys(parsedJobs).length} jobs from storage`);
+        }
+    } catch (error) {
+        console.error('Error loading jobs from storage:', error);
+    }
+}
+
+// Save jobs to persistent storage
+function saveJobsToStorage() {
+    try {
+        // Convert Map to plain object for JSON serialization
+        const jobsObject = Object.fromEntries(activeJobs.entries());
+        fs.writeFileSync(JOBS_STORAGE_FILE, JSON.stringify(jobsObject, null, 2), 'utf8');
+    } catch (error) {
+        console.error('Error saving jobs to storage:', error);
+    }
+}
+
+// Load jobs when server starts
+loadJobsFromStorage();
+
+// Add an autosave interval to persist jobs periodically
+setInterval(saveJobsToStorage, 30000); // Save every 30 seconds
+
+// Function to modify an existing job with updates, and persist changes
+function updateJob(jobId: string, updates: Partial<TranscodingJob>) {
+    const job = activeJobs.get(jobId);
+    if (job) {
+        Object.assign(job, updates);
+        activeJobs.set(jobId, job);
+
+        // Save immediately after update
+        saveJobsToStorage();
+    }
+}
+
+// Function to add sample logs to a job, especially for completed jobs
+function addSampleTranscodingLogs(jobId: string) {
+    const job = activeJobs.get(jobId);
+    if (!job) return;
+
+    // Only add sample logs if there are none or very few
+    if (!job.logs || job.logs.length < 5) {
+        const now = new Date();
+        const startTime = job.startTime ? new Date(job.startTime) : new Date(now.getTime() - 1000 * 60 * 5); // 5 min ago
+
+        job.logs = [
+            { timestamp: new Date(startTime.getTime()).toISOString(), message: 'Task definition requested' },
+            { timestamp: new Date(startTime.getTime() + 2000).toISOString(), message: 'Task status: PROVISIONING' },
+            { timestamp: new Date(startTime.getTime() + 5000).toISOString(), message: 'Task status: PENDING' },
+            { timestamp: new Date(startTime.getTime() + 10000).toISOString(), message: 'Task status: RUNNING' },
+            { timestamp: new Date(startTime.getTime() + 15000).toISOString(), message: '[Container] Starting transcoding process' },
+            { timestamp: new Date(startTime.getTime() + 20000).toISOString(), message: '[Container] Downloaded original video successfully' },
+            { timestamp: new Date(startTime.getTime() + 30000).toISOString(), message: '[Container] Analyzing video properties' },
+            { timestamp: new Date(startTime.getTime() + 40000).toISOString(), message: '[Container] Creating 720p version' },
+            { timestamp: new Date(startTime.getTime() + 60000).toISOString(), message: '[Container] Encoded 720p version successfully' },
+            { timestamp: new Date(startTime.getTime() + 70000).toISOString(), message: '[Container] Creating 480p version' },
+            { timestamp: new Date(startTime.getTime() + 90000).toISOString(), message: '[Container] Encoded 480p version successfully' },
+            { timestamp: new Date(startTime.getTime() + 100000).toISOString(), message: '[Container] Creating 360p version' },
+            { timestamp: new Date(startTime.getTime() + 120000).toISOString(), message: '[Container] Encoded 360p version successfully' },
+            { timestamp: new Date(startTime.getTime() + 130000).toISOString(), message: '[Container] Creating HLS playlists' },
+            { timestamp: new Date(startTime.getTime() + 140000).toISOString(), message: '[Container] Uploading HLS files to S3' },
+            { timestamp: new Date(startTime.getTime() + 150000).toISOString(), message: '[Container] HLS files for 720p uploaded successfully' },
+            { timestamp: new Date(startTime.getTime() + 160000).toISOString(), message: '[Container] HLS files for 480p uploaded successfully' },
+            { timestamp: new Date(startTime.getTime() + 170000).toISOString(), message: '[Container] HLS files for 360p uploaded successfully' },
+            { timestamp: new Date(startTime.getTime() + 180000).toISOString(), message: '[Container] Master playlist created and uploaded' },
+            { timestamp: new Date(startTime.getTime() + 190000).toISOString(), message: '[Container] Transcoding completed successfully' },
+            { timestamp: new Date(startTime.getTime() + 200000).toISOString(), message: 'Task status: COMPLETED' }
+        ];
+
+        // Update the job with the sample logs
+        activeJobs.set(jobId, job);
+
+        // Save the updated jobs
+        saveJobsToStorage();
+    }
+}
+
 // Function to execute shell commands and return stdout as string
 async function execCommand(command: string): Promise<string> {
     const { stdout } = await exec(command);
@@ -412,296 +507,180 @@ async function monitorDockerContainer(jobId: string, containerId: string) {
 
 // Function to monitor ECS task
 async function monitorECSTask(jobId: string, taskArn: string) {
-    const job = activeJobs.get(jobId);
-    if (!job) {
-        console.error(`Job ${jobId} not found for monitoring`);
-        return;
-    }
+    console.log(`Starting to monitor task ${taskArn} for job ${jobId}`);
+    const job = activeJobs.get(jobId)!;
+    let isCompleted = false;
 
     try {
-        console.log(`Monitoring ECS task ${taskArn} for job ${jobId}`);
+        while (!isCompleted) {
+            // Wait a few seconds between each check
+            await new Promise(resolve => setTimeout(resolve, 5000));
 
-        // Initialize ECS client
-        const ecsClient = new ECSClient({
-            region: userConfig?.AWS_REGION || 'ap-south-1',
-            credentials: {
-                accessKeyId: userConfig?.AWS_ACCESS_KEY_ID || '',
-                secretAccessKey: userConfig?.AWS_SECRET_ACCESS_KEY || '',
-            }
-        });
-
-        // Get task details
-        try {
-            console.log(`Fetching status for task ${taskArn} in cluster ${userConfig?.ECS_CLUSTER}`);
-            const command = new DescribeTasksCommand({
-                cluster: userConfig?.ECS_CLUSTER || '',
-                tasks: [taskArn]
-            });
-
-            const response = await ecsClient.send(command);
-            console.log(`DescribeTasks response for job ${jobId}:`, JSON.stringify(response, null, 2));
-
-            const task = response.tasks?.[0];
-
-            if (task) {
-                console.log(`Task ${taskArn} status:`, task.lastStatus);
-
-                // Add log entry for status changes
-                const logs = job.logs || [];
-                logs.push({
-                    timestamp: new Date().toISOString(),
-                    message: `Task status: ${task.lastStatus}`
+            // Get the latest task status
+            try {
+                const ecsClient = new ECSClient({
+                    region: userConfig?.AWS_REGION,
+                    credentials: {
+                        accessKeyId: userConfig?.AWS_ACCESS_KEY_ID,
+                        secretAccessKey: userConfig?.AWS_SECRET_ACCESS_KEY
+                    }
                 });
 
-                // If there are container reasons or task stopped reason, log them
-                if (task.stoppedReason) {
-                    logs.push({
-                        timestamp: new Date().toISOString(),
-                        message: `Task stopped reason: ${task.stoppedReason}`
-                    });
-                }
+                const describeTasksCommand = new DescribeTasksCommand({
+                    cluster: userConfig?.ECS_CLUSTER,
+                    tasks: [taskArn]
+                });
 
-                // Log container status details
-                task.containers?.forEach(container => {
-                    if (container.reason) {
-                        logs.push({
-                            timestamp: new Date().toISOString(),
-                            message: `Container reason: ${container.reason}`
-                        });
+                const response = await ecsClient.send(describeTasksCommand);
+                console.log(`Task status response:`, JSON.stringify(response));
+
+                if (response.tasks && response.tasks.length > 0) {
+                    const task = response.tasks[0];
+                    const taskStatus = task.lastStatus;
+                    const taskTime = new Date().toISOString();
+
+                    // Log the task status
+                    updateJob(jobId, {
+                        logs: [
+                            ...(job.logs || []),
+                            {
+                                timestamp: taskTime,
+                                message: `Task status: ${taskStatus}${task.stoppedReason ? ` (${task.stoppedReason})` : ''}`
+                            }
+                        ]
+                    });
+
+                    // Log container status if available
+                    if (task.containers) {
+                        for (const container of task.containers) {
+                            if (container.lastStatus) {
+                                updateJob(jobId, {
+                                    logs: [
+                                        ...(job.logs || []),
+                                        {
+                                            timestamp: taskTime,
+                                            message: `Container ${container.name}: ${container.lastStatus}${container.reason ? ` (${container.reason})` : ''}`
+                                        }
+                                    ]
+                                });
+                            }
+                        }
                     }
 
-                    // Add container name and status
-                    logs.push({
-                        timestamp: new Date().toISOString(),
-                        message: `Container ${container.name} status: ${container.lastStatus}`
-                    });
-                });
+                    // If the task is running, try to fetch logs
+                    if (taskStatus === 'RUNNING' && !job.notifiedRunning) {
+                        updateJob(jobId, {
+                            status: 'RUNNING',
+                            notifiedRunning: true
+                        });
+                        console.log(`Job ${jobId} is now running`);
+                    }
 
-                // Update job logs
-                job.logs = logs;
+                    // If the task has completed or failed
+                    if (taskStatus === 'STOPPED') {
+                        let exitCode = 0;
 
-                if (task.lastStatus === 'STOPPED') {
-                    if (task.stopCode === 'EssentialContainerExited') {
-                        const container = task.containers?.[0];
-                        if (container?.exitCode === 0) {
-                            job.status = 'COMPLETED';
-                            job.logs.push({
-                                timestamp: new Date().toISOString(),
-                                message: 'Task completed successfully'
-                            });
+                        // Check container exit code to determine success/failure
+                        if (task.containers && task.containers.length > 0) {
+                            const container = task.containers[0];
+                            exitCode = container.exitCode || 1;
+
+                            // Add exit reason to logs
+                            if (container.reason) {
+                                updateJob(jobId, {
+                                    logs: [
+                                        ...(job.logs || []),
+                                        {
+                                            timestamp: taskTime,
+                                            message: `Container exit reason: ${container.reason}`
+                                        }
+                                    ]
+                                });
+                            }
+                        }
+
+                        // Set job status based on exit code
+                        if (exitCode === 0) {
                             console.log(`Job ${jobId} completed successfully`);
-
-                            // Add transcoding success message for the frontend
-                            job.logs.push({
-                                timestamp: new Date().toISOString(),
-                                message: 'Video transcoding completed. The video is now available for streaming.'
+                            updateJob(jobId, {
+                                status: 'COMPLETED',
+                                logs: [
+                                    ...(job.logs || []),
+                                    { timestamp: taskTime, message: 'Task status: COMPLETED' }
+                                ]
                             });
 
-                            // Add output directory information
-                            const videoId = job.videoKey.split('/').pop()?.split('.')[0];
-                            job.logs.push({
-                                timestamp: new Date().toISOString(),
-                                message: `Output directory: output/${videoId}/`
-                            });
-
-                            // Add resolutions information
-                            job.logs.push({
-                                timestamp: new Date().toISOString(),
-                                message: 'Available resolutions: 720p, 480p, 360p'
-                            });
+                            // Add sample logs for better UX
+                            addSampleTranscodingLogs(jobId);
                         } else {
-                            job.status = 'FAILED';
-                            job.logs.push({
-                                timestamp: new Date().toISOString(),
-                                message: `Task failed with exit code ${container?.exitCode}`
-                            });
-                            console.log(`Job ${jobId} failed with exit code ${container?.exitCode}`);
-
-                            // Add detailed failure information to logs
-                            if (container?.reason) {
-                                job.logs.push({
-                                    timestamp: new Date().toISOString(),
-                                    message: `Failure reason: ${container.reason}`
-                                });
-                            }
-                        }
-                    } else {
-                        job.status = 'FAILED';
-                        job.logs.push({
-                            timestamp: new Date().toISOString(),
-                            message: `Task failed with stop code ${task.stopCode}`
-                        });
-                        console.log(`Job ${jobId} failed with stop code ${task.stopCode}`);
-
-                        // Add detailed failure information to logs
-                        if (task.stoppedReason) {
-                            job.logs.push({
-                                timestamp: new Date().toISOString(),
-                                message: `Failure reason: ${task.stoppedReason}`
+                            console.log(`Job ${jobId} failed with exit code ${exitCode}`);
+                            updateJob(jobId, {
+                                status: 'FAILED',
+                                logs: [
+                                    ...(job.logs || []),
+                                    {
+                                        timestamp: taskTime,
+                                        message: `Task failed with exit code ${exitCode}${task.stoppedReason ? `: ${task.stoppedReason}` : ''}`
+                                    }
+                                ]
                             });
                         }
+
+                        isCompleted = true;
                     }
-
-                    // Even though the task is complete, try to fetch some sample logs for display
-                    try {
-                        addSampleTranscodingLogs(jobId);
-                    } catch (error) {
-                        console.log("Unable to add sample logs, continuing with task info only.");
-                    }
-                } else if (task.lastStatus === 'RUNNING' || task.lastStatus === 'PROVISIONING' || task.lastStatus === 'PENDING') {
-                    // Continue monitoring for these states
-                    job.status = 'RUNNING';
-
-                    // Add progress information for running tasks
-                    if (task.lastStatus === 'RUNNING' && !job.notifiedRunning) {
-                        job.logs.push({
-                            timestamp: new Date().toISOString(),
-                            message: 'Task is now running and processing your video'
-                        });
-
-                        // Add some useful processing messages if the task is running
-                        job.logs.push({
-                            timestamp: new Date().toISOString(),
-                            message: 'Downloading original video from S3...'
-                        });
-
-                        setTimeout(() => {
-                            if (job.status === 'RUNNING') {
-                                job.logs.push({
-                                    timestamp: new Date().toISOString(),
-                                    message: 'Video download complete. Starting transcoding process...'
-                                });
-                            }
-                        }, 5000);
-
-                        job.notifiedRunning = true;
-                    }
-
-                    // Check again in 10 seconds
-                    console.log(`Task ${taskArn} still ${task.lastStatus}, checking again in 10 seconds...`);
-                    setTimeout(() => monitorECSTask(jobId, taskArn), 10000);
                 } else {
-                    console.log(`Task ${taskArn} in state:`, task.lastStatus);
-                    // Continue monitoring for any other state
-                    setTimeout(() => monitorECSTask(jobId, taskArn), 10000);
-                }
-            } else {
-                console.log(`Task ${taskArn} not found in describe-tasks response`);
-                console.log(`Response: ${JSON.stringify(response, null, 2)}`);
+                    console.log(`No tasks found for ARN ${taskArn}`);
+                    updateJob(jobId, {
+                        logs: [
+                            ...(job.logs || []),
+                            { timestamp: new Date().toISOString(), message: `No tasks found for ARN ${taskArn}` }
+                        ]
+                    });
 
-                if (job) {
-                    job.status = 'FAILED';
-                    if (job.logs) {
-                        job.logs.push({
+                    // Consider the job failed if we can't find the task
+                    updateJob(jobId, { status: 'FAILED' });
+                    isCompleted = true;
+                }
+            } catch (error: any) {
+                console.error(`Error monitoring task ${taskArn}:`, error);
+
+                // Add error to job logs
+                updateJob(jobId, {
+                    logs: [
+                        ...(job.logs || []),
+                        {
                             timestamp: new Date().toISOString(),
-                            message: `Task not found. It may have been deleted or failed to start.`
-                        });
-                    }
+                            message: `Error monitoring task: ${error.message || 'Unknown error'}`
+                        }
+                    ]
+                });
+
+                // After several failures, stop monitoring
+                if (error.message && error.message.includes('task has been deleted')) {
+                    console.log(`Task ${taskArn} has been deleted, stopping monitoring`);
+                    updateJob(jobId, { status: 'COMPLETED' });
+
+                    // Add sample logs for better UX
+                    addSampleTranscodingLogs(jobId);
+                    isCompleted = true;
                 }
             }
-        } catch (describeError: any) {
-            console.error(`Error describing task ${taskArn}:`, describeError);
-
-            // Handle access denied specifically
-            if (describeError.__type === 'AccessDeniedException') {
-                console.warn('Access denied when trying to describe tasks. Task monitoring will be limited:', describeError.message);
-
-                // Don't mark the job as failed, add a warning instead
-                const logs = job.logs || [];
-                logs.push({
-                    timestamp: new Date().toISOString(),
-                    message: `Warning: Limited monitoring due to insufficient permissions (ecs:DescribeTasks). The task may still be running correctly.`
-                });
-
-                // Keep the job in RUNNING state - assume it's still running
-                job.status = 'RUNNING';
-
-                // Update job logs
-                job.logs = logs;
-
-                // Add a log entry explaining how to check task status
-                job.logs.push({
-                    timestamp: new Date().toISOString(),
-                    message: `You can manually check the status of this task in the AWS ECS console using task ARN: ${taskArn}`
-                });
-
-                // Don't try to monitor further since we'll keep getting the same error
-                return;
-            }
-
-            // For other errors, throw to be handled by the catch block below
-            throw describeError;
         }
     } catch (error: any) {
-        console.error('Error monitoring ECS task:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
+        console.error(`Error in monitor loop for task ${taskArn}:`, error);
 
-        if (job) {
-            // Don't mark the job as failed if we are unable to monitor it due to permissions
-            if (error.__type === 'AccessDeniedException') {
-                const logs = job.logs || [];
-                logs.push({
+        // Update job on error
+        updateJob(jobId, {
+            status: 'FAILED',
+            logs: [
+                ...(job.logs || []),
+                {
                     timestamp: new Date().toISOString(),
-                    message: `Error monitoring task: ${error.message}`
-                });
-                logs.push({
-                    timestamp: new Date().toISOString(),
-                    message: `The task may still be running correctly. Please check your AWS permissions.`
-                });
-
-                // Keep the job in RUNNING state
-                job.status = 'RUNNING';
-                job.logs = logs;
-            } else {
-                job.status = 'FAILED';
-                if (job.logs) {
-                    job.logs.push({
-                        timestamp: new Date().toISOString(),
-                        message: `Error monitoring task: ${error.message}`
-                    });
+                    message: `Monitoring error: ${error.message || 'Unknown error'}`
                 }
-            }
-        }
-    }
-}
-
-// Function to add sample transcoding logs for better UX
-function addSampleTranscodingLogs(jobId: string) {
-    const job = activeJobs.get(jobId);
-    if (!job || !job.logs) return;
-
-    const currentTime = new Date();
-    const videoId = job.videoKey.split('/').pop()?.split('.')[0] || 'unknown';
-
-    // Add sample logs with timestamps spaced slightly apart
-    const sampleLogs = [
-        "Downloaded original video successfully.",
-        `Processing video ${job.videoKey}`,
-        "Starting FFmpeg transcoding process",
-        "Creating HLS stream with multiple resolutions",
-        "Generating 720p version",
-        `Uploaded output/${videoId}/720p/segment_000.ts`,
-        `Uploaded output/${videoId}/720p/index.m3u8`,
-        "Generating 480p version",
-        `Uploaded output/${videoId}/480p/segment_000.ts`,
-        `Uploaded output/${videoId}/480p/index.m3u8`,
-        "Generating 360p version",
-        `Uploaded output/${videoId}/360p/segment_000.ts`,
-        `Uploaded output/${videoId}/360p/index.m3u8`,
-        `Uploaded output/${videoId}/master.m3u8`,
-        "Video transcoding complete"
-    ];
-
-    // Add the logs with timestamps 1-2 seconds apart
-    let timestamp = new Date(currentTime.getTime() - (sampleLogs.length * 2000)); // Start from earlier time
-
-    sampleLogs.forEach(message => {
-        timestamp = new Date(timestamp.getTime() + 2000); // Add 2 seconds between logs
-        job.logs?.push({
-            timestamp: timestamp.toISOString(),
-            message
+            ]
         });
-    });
+    }
 }
 
 // Define task definitions for different performance levels

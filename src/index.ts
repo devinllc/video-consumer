@@ -23,7 +23,7 @@ app.use(cors({
 // Parse JSON bodies
 app.use(express.json());
 
-app.use(express.static('frontend'));
+app.use(express.static('frontend-app'));
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response): void => {

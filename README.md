@@ -49,6 +49,32 @@ After restarting, you should be able to:
 3. Start transcoding jobs
 4. Track job progress in real-time
 
+# REPLACED SIMULATION WITH ACTUAL ECS TASK EXECUTION
+
+We've updated the implementation to use actual AWS ECS tasks for video transcoding instead of simulating the process. The system now:
+
+1. Launches a real ECS task in your configured cluster
+2. Passes your AWS credentials and video information to the task
+3. Monitors the task status in real-time
+4. Reports actual progress from your ECS task
+
+To apply this update:
+
+```bash
+# 1. Connect to your EC2 instance
+ssh -i your-key.pem ec2-user@13.235.75.73
+
+# 2. Pull the latest changes
+cd ~/video-consumer
+git pull origin main
+
+# 3. Rebuild and restart
+npm run build
+pm2 restart video-backend
+```
+
+Make sure your ECS task definition is properly configured with the necessary environment variables and container setup for processing videos.
+
 # CRITICAL FIX FOR CONFIG.HTML LOCALHOST ERROR
 
 If you're still getting the `net::ERR_CONNECTION_REFUSED` error when trying to test/save configuration:

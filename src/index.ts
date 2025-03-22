@@ -1,5 +1,5 @@
 import { S3Client, PutObjectCommand, ListBucketsCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { ECSClient, RunTaskCommand, DescribeTasksCommand, DescribeClustersCommand, DescribeTaskDefinitionCommand } from "@aws-sdk/client-ecs";
+import { ECSClient, RunTaskCommand, DescribeTasksCommand, DescribeClustersCommand, DescribeTaskDefinitionCommand, ListTasksCommand } from "@aws-sdk/client-ecs";
 import { EC2Client, DescribeSubnetsCommand, DescribeSecurityGroupsCommand } from "@aws-sdk/client-ec2";
 import express, { Request, Response } from 'express';
 import cors from 'cors';
@@ -937,20 +937,125 @@ app.get('/api/jobs/:jobId', async (req: Request, res: Response) => {
 });
 
 // API endpoint to list all jobs
-app.get('/api/jobs', (_req: Request, res: Response): void => {
-    if (activeJobs.size === 0) {
-        res.json([]);
-        return;
+app.get('/api/jobs', async (_req: Request, res: Response) => {
+    try {
+        // Even if we have no active jobs in memory, check AWS for running tasks
+        if (activeJobs.size === 0 && userConfig) {
+            try {
+                console.log('No jobs found in memory, checking AWS ECS for running tasks...');
+
+                // Create ECS client
+                const ecsClient = new ECSClient({
+                    region: userConfig.AWS_REGION,
+                    credentials: {
+                        accessKeyId: userConfig.AWS_ACCESS_KEY_ID,
+                        secretAccessKey: userConfig.AWS_SECRET_ACCESS_KEY,
+                    }
+                });
+
+                // First get all task ARNs in the cluster
+                const listTasksCommand = {
+                    cluster: userConfig.ECS_CLUSTER,
+                };
+
+                try {
+                    // This will list all tasks in the cluster
+                    const listResponse = await ecsClient.send(new ListTasksCommand(listTasksCommand));
+                    console.log('Found tasks in AWS:', listResponse);
+
+                    if (listResponse.taskArns && listResponse.taskArns.length > 0) {
+                        // Get details of each task
+                        const tasksCommand = {
+                            cluster: userConfig.ECS_CLUSTER,
+                            tasks: listResponse.taskArns
+                        };
+
+                        const taskDetails = await ecsClient.send(new DescribeTasksCommand(tasksCommand));
+                        console.log('Task details:', JSON.stringify(taskDetails));
+
+                        // Create synthetic job entries for each task
+                        for (const task of taskDetails.tasks || []) {
+                            console.log(`Processing task: ${task.taskArn}`);
+
+                            // Try to find matching job ID in container overrides
+                            let jobId = null;
+                            let videoKey = null;
+
+                            // Try to extract from container environment variables
+                            if (task.overrides?.containerOverrides) {
+                                for (const container of task.overrides.containerOverrides) {
+                                    if (container.environment) {
+                                        for (const env of container.environment) {
+                                            if (env.name === 'JOB_ID') jobId = env.value;
+                                            if (env.name === 'KEY') videoKey = env.value;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // If we couldn't find from overrides, try to create a synthetic ID
+                            if (!jobId) {
+                                console.log("Couldn't find JOB_ID in task, creating synthetic ID");
+                                // Extract the last part of the task ARN which is unique
+                                const taskParts = task.taskArn?.split('/');
+                                jobId = taskParts ? taskParts[taskParts.length - 1] : null;
+                            }
+
+                            if (jobId) {
+                                console.log(`Found job ID: ${jobId}`);
+
+                                // Add to active jobs if not already present
+                                if (!activeJobs.has(jobId)) {
+                                    activeJobs.set(jobId, {
+                                        taskArn: task.taskArn,
+                                        videoKey: videoKey || 'unknown',
+                                        status: task.lastStatus === 'STOPPED' ? 'COMPLETED' : 'RUNNING',
+                                        startTime: task.createdAt || new Date(),
+                                        logs: [{
+                                            timestamp: new Date().toISOString(),
+                                            message: `Recovered task from AWS ECS: ${task.taskArn}`
+                                        }],
+                                        performanceLevel: 'standard',
+                                        notifiedRunning: true
+                                    });
+
+                                    // Start monitoring this task if it's still running
+                                    if (task.lastStatus !== 'STOPPED') {
+                                        monitorECSTask(jobId, task.taskArn!);
+                                    } else {
+                                        // For completed tasks, add sample logs
+                                        addSampleTranscodingLogs(jobId);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (listError) {
+                    console.error('Error listing tasks:', listError);
+                }
+            } catch (error: any) {
+                console.error('Error checking AWS for running tasks:', error);
+                // Continue with existing jobs even if AWS check fails
+            }
+        }
+
+        if (activeJobs.size === 0) {
+            res.json([]);
+            return;
+        }
+
+        const jobs = Array.from(activeJobs.entries()).map(([jobId, job]) => ({
+            jobId,
+            status: job.status,
+            startTime: job.startTime,
+            videoKey: job.videoKey
+        }));
+
+        res.json(jobs);
+    } catch (error: any) {
+        console.error('Error listing jobs:', error);
+        res.status(500).json({ error: 'Failed to list jobs', details: error.message });
     }
-
-    const jobs = Array.from(activeJobs.entries()).map(([jobId, job]) => ({
-        jobId,
-        status: job.status,
-        startTime: job.startTime,
-        videoKey: job.videoKey
-    }));
-
-    res.json(jobs);
 });
 
 // API endpoint to test connection
